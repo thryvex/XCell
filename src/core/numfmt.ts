@@ -67,13 +67,30 @@ export const ERROR_DISPLAY_MAP: Record<CellError, string> = {
   '#ERR': th.errors.syntax,
 };
 
-export const ERROR_TOOLTIP_MAP: Record<CellError, string> = {
+export const ERROR_TO_THAI_MAP = ERROR_DISPLAY_MAP;
+
+export const THAI_TO_ERROR_MAP: Record<string, CellError> = {
+  '#หารศูนย์': '#DIV/0!',
+  '#ค่าผิด': '#VALUE!',
+  '#อ้างอิงหาย': '#REF!',
+  '#ไม่รู้จักชื่อ': '#NAME?',
+  '#วนซ้ำ': '#CYCLE!',
+  '#สูตรผิด': '#ERR',
+};
+
+export const ERROR_TOOLTIP_MAP: Record<string, string> = {
   '#DIV/0!': th.errors.div0Tooltip,
   '#VALUE!': th.errors.valueTooltip,
   '#REF!': th.errors.refTooltip,
   '#NAME?': th.errors.nameTooltip,
   '#CYCLE!': th.errors.cycleTooltip,
   '#ERR': th.errors.syntaxTooltip,
+  '#หารศูนย์': th.errors.div0Tooltip,
+  '#ค่าผิด': th.errors.valueTooltip,
+  '#อ้างอิงหาย': th.errors.refTooltip,
+  '#ไม่รู้จักชื่อ': th.errors.nameTooltip,
+  '#วนซ้ำ': th.errors.cycleTooltip,
+  '#สูตรผิด': th.errors.syntaxTooltip,
 };
 
 export function formatNumberWithCommas(val: number, decimals: number): string {

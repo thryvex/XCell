@@ -4,6 +4,7 @@ import { FormulaBar } from './FormulaBar';
 import { Grid } from './Grid';
 import { StatusBar } from './StatusBar';
 import { ConfirmDialog } from './Dialogs';
+import { FormulaHelper } from './FormulaHelper';
 import { useSheetStore } from './store';
 import { th } from '../i18n/th';
 
@@ -16,6 +17,9 @@ export const App: React.FC = () => {
     saveWorkbook,
     markSaved,
     updateTitle,
+    pendingDelete,
+    confirmPendingDelete,
+    cancelPendingDelete,
   } = useSheetStore();
 
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
@@ -207,6 +211,27 @@ export const App: React.FC = () => {
         }}
         onCancel={() => setConfirmNewOpen(false)}
       />
+
+      {/* Delete Row/Col Referenced Warning Modal */}
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        message={
+          pendingDelete
+            ? (pendingDelete.type === 'row'
+                ? th.dialog.confirmDeleteReferencedRow
+                : th.dialog.confirmDeleteReferencedCol
+              ).replace('{count}', String(pendingDelete.count))
+            : ''
+        }
+        confirmText={th.dialog.delete}
+        cancelText={th.dialog.cancel}
+        danger={true}
+        onConfirm={confirmPendingDelete}
+        onCancel={cancelPendingDelete}
+      />
+
+      {/* Formula Helper Dialog */}
+      <FormulaHelper />
     </div>
   );
 };

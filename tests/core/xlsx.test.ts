@@ -123,4 +123,24 @@ describe('src/core/xlsx (Round-trip test)', () => {
     expect(cC1.style?.fontFamily).toBe('TH Sarabun New');
     expect(cC1.style?.color).toBe('#2563eb');
   });
+
+  it('exports errors as standard Excel error objects and imports back correctly', async () => {
+    const wb = createEmptyWorkbook();
+    const sheet = wb.sheets[0];
+
+    // Formula producing #DIV/0!
+    sheet.cells['A1'] = { raw: '=1/0' };
+    // Explicit raw error #REF!
+    sheet.cells['A2'] = { raw: '#REF!' };
+    // Formula producing cycle -> saved to xlsx as #REF!
+    sheet.cells['B1'] = { raw: '=B1' };
+
+    const buffer = await exportToXlsxBuffer(wb);
+    const importedWb = await importFromXlsxBuffer(buffer);
+    const importedSheet = importedWb.sheets[0];
+
+    expect(importedSheet.cells['A1'].raw).toBe('=1/0');
+    expect(importedSheet.cells['A2'].raw).toBe('#REF!');
+    expect(importedSheet.cells['B1'].raw).toBe('=B1');
+  });
 });

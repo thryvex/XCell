@@ -84,6 +84,10 @@ export const Grid: React.FC = () => {
   // Context Menu state
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; targetType: ContextMenuTarget } | null>(null);
 
+  // Point mode drag state
+  const [pointModeAnchor, setPointModeAnchor] = useState<{ r: number; c: number } | null>(null);
+  const [pointModeBaseFormula, setPointModeBaseFormula] = useState<string>('');
+
   // Precompute merge maps
   const { anchorMap, coveredMap } = useMemo(() => {
     const anchors: Record<string, MergeRange> = {};
@@ -278,10 +282,11 @@ export const Grid: React.FC = () => {
     if (e.button !== 0) return;
 
     if (isEditing && isPointModeReady()) {
-      // Point mode: insert reference into formula
+      // Point mode: insert reference into formula and allow range drag
       e.preventDefault();
-      const clickedA1 = cellToA1(r, c);
-      setEditingValue(editingValue + clickedA1);
+      setPointModeAnchor({ r, c });
+      setPointModeBaseFormula(editingValue);
+      setEditingValue(editingValue + cellToA1(r, c));
       return;
     }
 
@@ -294,6 +299,20 @@ export const Grid: React.FC = () => {
   };
 
   const handleCellMouseEnter = (r: number, c: number) => {
+    if (pointModeAnchor) {
+      // Expand point mode range reference
+      const r1 = Math.min(pointModeAnchor.r, r);
+      const c1 = Math.min(pointModeAnchor.c, c);
+      const r2 = Math.max(pointModeAnchor.r, r);
+      const c2 = Math.max(pointModeAnchor.c, c);
+      const refStr =
+        r1 === r2 && c1 === c2
+          ? cellToA1(r, c)
+          : `${cellToA1(r1, c1)}:${cellToA1(r2, c2)}`;
+      setEditingValue(pointModeBaseFormula + refStr);
+      return;
+    }
+
     if (isFillDragging) {
       // Expand fill preview
       const r1 = Math.min(selection.r1, r);
@@ -342,6 +361,10 @@ export const Grid: React.FC = () => {
   };
 
   const handleMouseUp = () => {
+    if (pointModeAnchor) {
+      setPointModeAnchor(null);
+      setPointModeBaseFormula('');
+    }
     if (isFillDragging && fillTarget) {
       applyFillRange(fillTarget);
       setIsFillDragging(false);

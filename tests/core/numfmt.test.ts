@@ -5,6 +5,8 @@ import {
   formatDate,
   serialToDate,
   dateToSerial,
+  ERROR_TOOLTIP_MAP,
+  THAI_TO_ERROR_MAP,
 } from '../../src/core/numfmt';
 
 describe('src/core/numfmt', () => {
@@ -24,12 +26,29 @@ describe('src/core/numfmt', () => {
     expect(formatDisplayValue(1234.567, 'integer')).toBe('1,235');
   });
 
-  it('converts error codes to Thai user-friendly text', () => {
+  it('converts error codes to Thai user-friendly text and tooltips', () => {
     expect(formatDisplayValue('#DIV/0!')).toBe('#หารศูนย์');
     expect(formatDisplayValue('#VALUE!')).toBe('#ค่าผิด');
     expect(formatDisplayValue('#REF!')).toBe('#อ้างอิงหาย');
-    expect(formatDisplayValue('#CYCLE!')).toBe('#วนซ้ำ');
     expect(formatDisplayValue('#NAME?')).toBe('#ไม่รู้จักชื่อ');
+    expect(formatDisplayValue('#CYCLE!')).toBe('#วนซ้ำ');
+    expect(formatDisplayValue('#ERR')).toBe('#สูตรผิด');
+
+    // Tooltip mapping for both English code and Thai display name
+    expect(ERROR_TOOLTIP_MAP['#DIV/0!']).toContain('หารด้วยศูนย์ไม่ได้');
+    expect(ERROR_TOOLTIP_MAP['#หารศูนย์']).toContain('หารด้วยศูนย์ไม่ได้');
+    expect(ERROR_TOOLTIP_MAP['#REF!']).toContain('เซลที่สูตรอ้างถึงถูกลบไปแล้ว');
+    expect(ERROR_TOOLTIP_MAP['#อ้างอิงหาย']).toContain('เซลที่สูตรอ้างถึงถูกลบไปแล้ว');
+    expect(ERROR_TOOLTIP_MAP['#CYCLE!']).toContain('สูตรอ้างอิงวนกลับมาหาตัวเอง');
+    expect(ERROR_TOOLTIP_MAP['#วนซ้ำ']).toContain('สูตรอ้างอิงวนกลับมาหาตัวเอง');
+
+    // Reverse map
+    expect(THAI_TO_ERROR_MAP['#หารศูนย์']).toBe('#DIV/0!');
+    expect(THAI_TO_ERROR_MAP['#ค่าผิด']).toBe('#VALUE!');
+    expect(THAI_TO_ERROR_MAP['#อ้างอิงหาย']).toBe('#REF!');
+    expect(THAI_TO_ERROR_MAP['#ไม่รู้จักชื่อ']).toBe('#NAME?');
+    expect(THAI_TO_ERROR_MAP['#วนซ้ำ']).toBe('#CYCLE!');
+    expect(THAI_TO_ERROR_MAP['#สูตรผิด']).toBe('#ERR');
   });
 
   it('parses and formats dates (Day/Month/Year)', () => {

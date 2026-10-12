@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { insertRow, deleteRow, insertCol, deleteCol } from '../../src/core/sheetOps';
+import {
+  insertRow,
+  deleteRow,
+  insertCol,
+  deleteCol,
+  countFormulasReferencingRow,
+  countFormulasReferencingCol,
+} from '../../src/core/sheetOps';
 import { createEmptySheet } from '../../src/core/model';
 
 describe('src/core/sheetOps', () => {
@@ -44,5 +51,28 @@ describe('src/core/sheetOps', () => {
 
     deleteCol(sheet, 1, 1);
     expect(sheet.cells['B1'].raw).toBe('=A1*2');
+  });
+
+  it('counts formulas referencing row or column accurately', () => {
+    const sheet = createEmptySheet();
+    sheet.cells['A1'] = { raw: '10' };
+    sheet.cells['B1'] = { raw: '20' };
+    sheet.cells['C2'] = { raw: '=A1+B1' };
+    sheet.cells['C3'] = { raw: '=A1*2' };
+
+    // Row 1 (0-based 0) is referenced by C2 and C3
+    expect(countFormulasReferencingRow(sheet, 0)).toBe(2);
+
+    // Row 2 (0-based 1) is not referenced by any other formula
+    expect(countFormulasReferencingRow(sheet, 1)).toBe(0);
+
+    // Col A (0-based 0) is referenced by C1 and C2
+    expect(countFormulasReferencingCol(sheet, 0)).toBe(2);
+
+    // Col B (0-based 1) is referenced by C1 only
+    expect(countFormulasReferencingCol(sheet, 1)).toBe(1);
+
+    // Col D (0-based 3) has no references
+    expect(countFormulasReferencingCol(sheet, 3)).toBe(0);
   });
 });

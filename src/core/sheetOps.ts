@@ -201,3 +201,51 @@ export function deleteCol(sheet: Sheet, atCol: number, count = 1): Sheet {
   sheet.merges = newMerges;
   return sheet;
 }
+
+/**
+ * Counts how many formulas in the sheet will be broken into #REF! if the row is deleted.
+ * Cells residing inside the deleted row are excluded.
+ */
+export function countFormulasReferencingRow(sheet: Sheet, atRow: number, count = 1): number {
+  let affectedCount = 0;
+  const deleteEnd = atRow + count - 1;
+
+  for (const [key, cell] of Object.entries(sheet.cells)) {
+    const p = parseA1(key);
+    if (!p) continue;
+    if (p.r >= atRow && p.r <= deleteEnd) continue;
+
+    if (cell.raw && cell.raw.startsWith('=')) {
+      const shifted = shiftFormulaOnDelete(cell.raw, 'row', atRow, count);
+      if (shifted.includes('#REF!') && !cell.raw.includes('#REF!')) {
+        affectedCount++;
+      }
+    }
+  }
+
+  return affectedCount;
+}
+
+/**
+ * Counts how many formulas in the sheet will be broken into #REF! if the column is deleted.
+ * Cells residing inside the deleted column are excluded.
+ */
+export function countFormulasReferencingCol(sheet: Sheet, atCol: number, count = 1): number {
+  let affectedCount = 0;
+  const deleteEnd = atCol + count - 1;
+
+  for (const [key, cell] of Object.entries(sheet.cells)) {
+    const p = parseA1(key);
+    if (!p) continue;
+    if (p.c >= atCol && p.c <= deleteEnd) continue;
+
+    if (cell.raw && cell.raw.startsWith('=')) {
+      const shifted = shiftFormulaOnDelete(cell.raw, 'col', atCol, count);
+      if (shifted.includes('#REF!') && !cell.raw.includes('#REF!')) {
+        affectedCount++;
+      }
+    }
+  }
+
+  return affectedCount;
+}

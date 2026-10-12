@@ -5,6 +5,9 @@ interface ConfirmDialogProps {
   isOpen: boolean;
   title?: string;
   message: string;
+  confirmText?: string;
+  cancelText?: string;
+  danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -13,6 +16,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   isOpen,
   title = th.dialog.warning,
   message,
+  confirmText = th.dialog.ok,
+  cancelText = th.dialog.cancel,
+  danger = false,
   onConfirm,
   onCancel,
 }) => {
@@ -50,9 +56,25 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>{title}</h3>
         <p style={{ margin: 0, color: 'var(--fg-main)', lineHeight: 1.5 }}>{message}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-          <button onClick={onCancel}>{th.dialog.cancel}</button>
-          <button className="primary" onClick={onConfirm}>
-            {th.dialog.ok}
+          <button onClick={onCancel}>{cancelText}</button>
+          <button
+            className={danger ? '' : 'primary'}
+            style={
+              danger
+                ? {
+                    backgroundColor: 'var(--color-danger)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '6px 14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }
+                : undefined
+            }
+            onClick={onConfirm}
+          >
+            {confirmText}
           </button>
         </div>
       </div>

@@ -13,6 +13,7 @@ export const FormulaBar: React.FC = () => {
     commitEditing,
     cancelEditing,
     getRawValue,
+    openFormulaHelper,
   } = useSheetStore();
 
   const activeA1 = cellToA1(activeCell.r, activeCell.c);
@@ -61,9 +62,24 @@ export const FormulaBar: React.FC = () => {
           padding: '4px 6px',
         }}
       />
-      <span style={{ color: 'var(--fg-muted)', fontWeight: 600, fontStyle: 'italic', fontSize: '15px' }}>
+      <button
+        type="button"
+        onClick={openFormulaHelper}
+        title={th.formulaHelper.title}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--color-primary)',
+          fontWeight: 700,
+          fontStyle: 'italic',
+          fontSize: '16px',
+          cursor: 'pointer',
+          padding: '2px 6px',
+          borderRadius: '4px',
+        }}
+      >
         {th.formulaBar.fx}
-      </span>
+      </button>
       <input
         value={displayVal}
         onChange={handleInputChange}

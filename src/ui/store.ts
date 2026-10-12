@@ -16,7 +16,14 @@ import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/addres
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../core/xlsx';
 import { formatDisplayValue } from '../core/numfmt';
 import { shiftFormula } from '../core/refshift';
-import { insertRow as opInsertRow, deleteRow as opDeleteRow, insertCol as opInsertCol, deleteCol as opDeleteCol } from '../core/sheetOps';
+import {
+  insertRow as opInsertRow,
+  deleteRow as opDeleteRow,
+  insertCol as opInsertCol,
+  deleteCol as opDeleteCol,
+  countFormulasReferencingRow,
+  countFormulasReferencingCol,
+} from '../core/sheetOps';
 import { rangeToTsv, rangeToHtml, parseTsv } from '../core/clipboard';
 import { computeFill, fillDown as opFillDown, fillRight as opFillRight } from '../core/fill';
 import { detectSigmaRange } from '../core/sigma';
@@ -108,6 +115,15 @@ export interface SheetState {
   setTextColor: (color?: string) => void;
   setFillColor: (fill?: string) => void;
   setBorder: (border?: 'none' | 'all' | 'outer') => void;
+
+  // Phase 3B state & actions
+  pendingDelete: { type: 'row' | 'col'; index: number; count: number } | null;
+  confirmPendingDelete: () => void;
+  cancelPendingDelete: () => void;
+  isFormulaHelperOpen: boolean;
+  openFormulaHelper: () => void;
+  closeFormulaHelper: () => void;
+  insertFormulaFunction: (fnName: string) => void;
 }
 
 const initialWb = createEmptyWorkbook();
@@ -130,6 +146,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   colCount: 26,
   clipboard: null,
   cutRange: null,
+  pendingDelete: null,
+  isFormulaHelperOpen: false,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -213,6 +231,13 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const prevCell = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
 
     let finalValue = editingValue.trim();
+    if (finalValue.startsWith('=')) {
+      const openCount = (finalValue.match(/\(/g) || []).length;
+      const closeCount = (finalValue.match(/\)/g) || []).length;
+      if (openCount > closeCount) {
+        finalValue += ')'.repeat(openCount - closeCount);
+      }
+    }
     const shorthandConverted = convertShorthand(finalValue);
     if (shorthandConverted) {
       finalValue = shorthandConverted;
@@ -954,9 +979,18 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     updateTitle();
   },
 
-  deleteRowAt: (atRow: number) => {
+  deleteRowAt: (atRow: number, force = false) => {
     const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
     const sheet = workbook.sheets[activeSheetIndex];
+
+    if (!force) {
+      const refCount = countFormulasReferencingRow(sheet, atRow);
+      if (refCount > 0) {
+        set({ pendingDelete: { type: 'row', index: atRow, count: refCount } });
+        return;
+      }
+    }
+
     const fullBefore = {
       cells: JSON.parse(JSON.stringify(sheet.cells)),
       merges: JSON.parse(JSON.stringify(sheet.merges)),
@@ -1018,9 +1052,18 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     updateTitle();
   },
 
-  deleteColAt: (atCol: number) => {
+  deleteColAt: (atCol: number, force = false) => {
     const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
     const sheet = workbook.sheets[activeSheetIndex];
+
+    if (!force) {
+      const refCount = countFormulasReferencingCol(sheet, atCol);
+      if (refCount > 0) {
+        set({ pendingDelete: { type: 'col', index: atCol, count: refCount } });
+        return;
+      }
+    }
+
     const fullBefore = {
       cells: JSON.parse(JSON.stringify(sheet.cells)),
       merges: JSON.parse(JSON.stringify(sheet.merges)),
@@ -1048,6 +1091,40 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       isDirty: true,
     });
     updateTitle();
+  },
+
+  confirmPendingDelete: () => {
+    const { pendingDelete, deleteRowAt, deleteColAt } = get();
+    if (!pendingDelete) return;
+    if (pendingDelete.type === 'row') {
+      deleteRowAt(pendingDelete.index, true);
+    } else {
+      deleteColAt(pendingDelete.index, true);
+    }
+    set({ pendingDelete: null });
+  },
+
+  cancelPendingDelete: () => {
+    set({ pendingDelete: null });
+  },
+
+  openFormulaHelper: () => set({ isFormulaHelperOpen: true }),
+  closeFormulaHelper: () => set({ isFormulaHelperOpen: false }),
+
+  insertFormulaFunction: (fnName: string) => {
+    const { activeCell, selection, startEditing } = get();
+    const isRangeSelected =
+      selection.r1 !== selection.r2 || selection.c1 !== selection.c2;
+
+    set({ isFormulaHelperOpen: false });
+
+    if (isRangeSelected) {
+      const startA1 = cellToA1(selection.r1, selection.c1);
+      const endA1 = cellToA1(selection.r2, selection.c2);
+      startEditing(`=${fnName}(${startA1}:${endA1})`);
+    } else {
+      startEditing(`=${fnName}(`);
+    }
   },
 
   addRowsAtBottom: (count = 50) => {

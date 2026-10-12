@@ -2,7 +2,8 @@ import ExcelJS from 'exceljs';
 import { Workbook, Sheet, Cell, CellStyle, NumFmt, MergeRange, createEmptySheet } from './model';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseA1 } from './address';
-import { dateToSerial } from './numfmt';
+import { dateToSerial, THAI_TO_ERROR_MAP } from './numfmt';
+import { isCellError } from './functions';
 
 const NUM_FMT_EXCEL: Record<string, string> = {
   number2: '#,##0.00',
@@ -88,10 +89,24 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
         // Formula: replace aliases like MEAN -> AVERAGE for Google Sheets compatibility
         const formulaStr = raw.slice(1).replace(/\bMEAN\(/gi, 'AVERAGE(');
         const computed = evaluator.getCellValue(key);
+        let resultVal: any = typeof computed === 'number' || typeof computed === 'string' ? computed : undefined;
+
+        if (typeof computed === 'string' && (isCellError(computed) || computed in THAI_TO_ERROR_MAP)) {
+          let errCode = isCellError(computed) ? computed : THAI_TO_ERROR_MAP[computed];
+          if (errCode === '#CYCLE!') errCode = '#REF!';
+          if (errCode === '#ERR') errCode = '#VALUE!';
+          resultVal = { error: errCode };
+        }
+
         excelCell.value = {
           formula: formulaStr,
-          result: typeof computed === 'number' || typeof computed === 'string' ? computed : undefined,
+          result: resultVal,
         };
+      } else if (isCellError(raw) || raw in THAI_TO_ERROR_MAP) {
+        let errCode = isCellError(raw) ? raw : THAI_TO_ERROR_MAP[raw];
+        if (errCode === '#CYCLE!') errCode = '#REF!';
+        if (errCode === '#ERR') errCode = '#VALUE!';
+        excelCell.value = { error: errCode as any };
       } else {
         const cleaned = raw.replace(/,/g, '');
         if (cleaned !== '' && !isNaN(Number(cleaned))) {
@@ -182,6 +197,12 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
         if (cell.type === ExcelJS.ValueType.Formula) {
           const f = cell.formula;
           raw = f ? `=${f}` : '';
+        } else if (
+          cell.type === ExcelJS.ValueType.Error ||
+          (cell.value && typeof cell.value === 'object' && 'error' in cell.value)
+        ) {
+          const errVal = (cell.value as any)?.error;
+          raw = typeof errVal === 'string' ? errVal : '#ERR';
         } else if (cell.type === ExcelJS.ValueType.Date) {
           const d = cell.value as Date;
           if (d instanceof Date && !isNaN(d.getTime())) {

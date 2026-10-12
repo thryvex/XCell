@@ -41,6 +41,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
     setTextColor,
     setFillColor,
     setBorder,
+    openFormulaHelper,
   } = useSheetStore();
 
   const [sigmaMenuOpen, setSigmaMenuOpen] = useState(false);
@@ -625,6 +626,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
               onClick={() => handleSigmaSelect('MEDIAN')}
             >
               {th.toolbar.median}
+            </button>
+            <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
+            <button
+              style={{
+                border: 'none',
+                background: 'transparent',
+                justifyContent: 'flex-start',
+                padding: '6px 12px',
+                fontWeight: 600,
+                color: 'var(--color-primary)',
+              }}
+              onClick={() => {
+                openFormulaHelper();
+                setSigmaMenuOpen(false);
+              }}
+            >
+              ƒx {th.toolbar.otherFunctions}
             </button>
           </div>
         )}
