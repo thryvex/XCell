@@ -19,9 +19,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
     unmergeCells,
     setNumFmt,
     applySigma,
+    activeCell,
+    insertRowAt,
+    deleteRowAt,
+    insertColAt,
+    deleteColAt,
+    addRowsAtBottom,
   } = useSheetStore();
 
   const [sigmaMenuOpen, setSigmaMenuOpen] = useState(false);
+  const [rowColMenuOpen, setRowColMenuOpen] = useState(false);
 
   const handleFmtChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as NumFmt;
@@ -103,6 +110,106 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
       <button onClick={() => setNumFmt('percent')} title="จัดรูปแบบ %">
         %
       </button>
+
+      <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+
+      {/* Row and Column Management */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            setRowColMenuOpen(!rowColMenuOpen);
+            setSigmaMenuOpen(false);
+          }}
+          title="จัดการแถวและคอลัมน์"
+        >
+          ☵ แถว/คอลัมน์ ▾
+        </button>
+        {rowColMenuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 100,
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: '180px',
+              marginTop: '4px',
+              padding: '4px 0',
+            }}
+          >
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px' }}
+              onClick={() => {
+                insertRowAt(activeCell.r);
+                setRowColMenuOpen(false);
+              }}
+            >
+              ＋ แทรกแถวด้านบน
+            </button>
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px' }}
+              onClick={() => {
+                insertRowAt(activeCell.r + 1);
+                setRowColMenuOpen(false);
+              }}
+            >
+              ＋ แทรกแถวด้านล่าง
+            </button>
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px', color: 'var(--color-danger)' }}
+              onClick={() => {
+                deleteRowAt(activeCell.r);
+                setRowColMenuOpen(false);
+              }}
+            >
+              🗑️ ลบแถวปัจจุบัน
+            </button>
+            <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px' }}
+              onClick={() => {
+                insertColAt(activeCell.c);
+                setRowColMenuOpen(false);
+              }}
+            >
+              ＋ แทรกคอลัมน์ทางซ้าย
+            </button>
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px' }}
+              onClick={() => {
+                insertColAt(activeCell.c + 1);
+                setRowColMenuOpen(false);
+              }}
+            >
+              ＋ แทรกคอลัมน์ทางขวา
+            </button>
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px', color: 'var(--color-danger)' }}
+              onClick={() => {
+                deleteColAt(activeCell.c);
+                setRowColMenuOpen(false);
+              }}
+            >
+              🗑️ ลบคอลัมน์ปัจจุบัน
+            </button>
+            <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
+            <button
+              style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px', fontWeight: 600 }}
+              onClick={() => {
+                addRowsAtBottom(50);
+                setRowColMenuOpen(false);
+              }}
+            >
+              ＋ เพิ่ม 50 แถวล่างสุด
+            </button>
+          </div>
+        )}
+      </div>
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
 

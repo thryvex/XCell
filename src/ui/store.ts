@@ -86,6 +86,7 @@ export interface SheetState {
   deleteRowAt: (atRow: number) => void;
   insertColAt: (atCol: number) => void;
   deleteColAt: (atCol: number) => void;
+  addRowsAtBottom: (count?: number) => void;
   setColWidth: (colIdx: number, width: number) => void;
   setRowHeight: (rowIdx: number, height: number) => void;
   freezeTo: (rows: number, cols: number) => void;
@@ -816,6 +817,15 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     set({
       workbook: { ...workbook },
       colCount: Math.max(1, colCount - 1),
+      isDirty: true,
+    });
+    updateTitle();
+  },
+
+  addRowsAtBottom: (count = 50) => {
+    const { rowCount, updateTitle } = get();
+    set({
+      rowCount: rowCount + count,
       isDirty: true,
     });
     updateTitle();

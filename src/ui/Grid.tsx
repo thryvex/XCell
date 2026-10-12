@@ -52,6 +52,7 @@ export const Grid: React.FC = () => {
     setRowHeight,
     freezeTo,
     applyFillRange,
+    addRowsAtBottom,
     fillDownAction,
     fillRightAction,
     cycleCurrentReference,
@@ -528,6 +529,11 @@ export const Grid: React.FC = () => {
                   <th
                     key={c}
                     onClick={() => handleColHeaderClick(c)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      handleColHeaderClick(c);
+                      setContextMenuPos({ x: e.clientX, y: e.clientY });
+                    }}
                     style={{
                       position: 'sticky',
                       top: 0,
@@ -588,6 +594,11 @@ export const Grid: React.FC = () => {
                   {/* Row header (1, 2, 3...) */}
                   <th
                     onClick={() => handleRowHeaderClick(r)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      handleRowHeaderClick(r);
+                      setContextMenuPos({ x: e.clientX, y: e.clientY });
+                    }}
                     style={{
                       position: 'sticky',
                       left: 0,
@@ -682,6 +693,54 @@ export const Grid: React.FC = () => {
             })}
           </tbody>
         </table>
+
+        {/* Append rows bar at bottom */}
+        <div
+          style={{
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            backgroundColor: 'var(--bg-app)',
+          }}
+        >
+          <span style={{ fontSize: '13px', color: 'var(--fg-muted)' }}>
+            เพิ่มแถวที่ด้านล่าง:
+          </span>
+          <button
+            onClick={() => addRowsAtBottom(50)}
+            style={{
+              padding: '4px 12px',
+              fontSize: '13px',
+              fontWeight: 500,
+              backgroundColor: 'var(--bg-toolbar)',
+              color: 'var(--fg-primary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            ＋ เพิ่ม 50 แถว
+          </button>
+          <button
+            onClick={() => addRowsAtBottom(100)}
+            style={{
+              padding: '4px 12px',
+              fontSize: '13px',
+              fontWeight: 500,
+              backgroundColor: 'var(--bg-toolbar)',
+              color: 'var(--fg-primary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            ＋ เพิ่ม 100 แถว
+          </button>
+          <span style={{ fontSize: '12px', color: 'var(--fg-muted)', marginLeft: '8px' }}>
+            (ปัจจุบันมี {rowCount} แถว)
+          </span>
+        </div>
       </div>
 
       {/* Context Menu */}
