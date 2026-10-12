@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Toolbar } from './Toolbar';
 import { FormulaBar } from './FormulaBar';
 import { Grid } from './Grid';
 import { StatusBar } from './StatusBar';
-import { ConfirmDialog } from './Dialogs';
+import {
+  ConfirmDialog,
+  UnsavedChangesDialog,
+  RecoveryDialog,
+  UnsupportedOverwriteDialog,
+} from './Dialogs';
 import { FormulaHelper } from './FormulaHelper';
 import { useSheetStore } from './store';
 import { th } from '../i18n/th';
@@ -20,10 +25,30 @@ export const App: React.FC = () => {
     pendingDelete,
     confirmPendingDelete,
     cancelPendingDelete,
+    // Phase 3C
+    recentFiles,
+    fetchRecentFiles,
+    removeRecentFile,
+    saveRecoverySnapshot,
+    clearRecoverySnapshot,
+    restoreRecoveryWorkbook,
+    unsupportedFeatures,
+    hasWarnedUnsupportedOverwrite,
+    setHasWarnedUnsupportedOverwrite,
+    dismissUnsupportedBanner,
   } = useSheetStore();
 
-  const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Dialog states
+  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void> | void) | 'close' | null>(null);
+
+  const [recoveryDialogOpen, setRecoveryDialogOpen] = useState(false);
+  const [recoveryList, setRecoveryList] = useState<any[]>([]);
+
+  const [unsupportedOverwriteOpen, setUnsupportedOverwriteOpen] = useState(false);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -32,45 +57,66 @@ export const App: React.FC = () => {
     }, 3500);
   }, []);
 
-  const handleNew = () => {
-    if (isDirty) {
-      setConfirmNewOpen(true);
-    } else {
-      newWorkbook();
-    }
-  };
+  // Fetch recent files and check for recovery files on mount
+  useEffect(() => {
+    fetchRecentFiles();
 
-  const handleOpen = async () => {
+    const checkRecovery = async () => {
+      const electronAPI = (window as any).electronAPI;
+      if (electronAPI?.getRecoveryList) {
+        try {
+          const list = await electronAPI.getRecoveryList();
+          if (Array.isArray(list) && list.length > 0) {
+            setRecoveryList(list);
+            setRecoveryDialogOpen(true);
+          }
+        } catch {}
+      }
+    };
+
+    checkRecovery();
+  }, [fetchRecentFiles]);
+
+  // Periodic auto-recovery snapshot every 30 seconds (SPEC 6.3)
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const timer = setInterval(() => {
+      saveRecoverySnapshot();
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, [isDirty, saveRecoverySnapshot]);
+
+  // Execute save to a given file path
+  const executeSaveToPath = async (targetPath: string): Promise<boolean> => {
     try {
       const electronAPI = (window as any).electronAPI;
+      const buffer = await saveWorkbook();
+
       if (electronAPI) {
-        const res = await electronAPI.openFile();
-        if (res && !res.canceled && res.data) {
-          const uint8 = new Uint8Array(res.data);
-          await loadWorkbook(uint8, res.filePath);
-          showToast(th.messages.fileOpened);
+        const writeRes = await electronAPI.writeFile(targetPath, Array.from(buffer));
+        if (writeRes.success) {
+          markSaved(targetPath);
+          showToast(th.messages.fileSaved);
+          return true;
+        } else {
+          showToast(th.messages.fileSaveFailed + writeRes.error);
+          return false;
         }
       } else {
-        // Fallback for browser testing
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.xlsx,.csv';
-        input.onchange = async (e: any) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            const buf = await file.arrayBuffer();
-            await loadWorkbook(new Uint8Array(buf), file.name);
-            showToast(th.messages.fileOpened);
-          }
-        };
-        input.click();
+        markSaved(targetPath);
+        showToast(th.messages.fileSaved);
+        return true;
       }
     } catch (err: any) {
-      showToast(th.messages.fileOpenFailed + (err.message || String(err)));
+      showToast(th.messages.fileSaveFailed + (err.message || String(err)));
+      return false;
     }
   };
 
-  const handleSaveAs = async () => {
+  // Save As
+  const handleSaveAs = async (): Promise<boolean> => {
     try {
       const electronAPI = (window as any).electronAPI;
       const buffer = await saveWorkbook();
@@ -85,10 +131,13 @@ export const App: React.FC = () => {
           if (writeRes.success) {
             markSaved(saveDialogRes.filePath);
             showToast(th.messages.fileSaved);
+            return true;
           } else {
             showToast(th.messages.fileSaveFailed + writeRes.error);
+            return false;
           }
         }
+        return false;
       } else {
         // Fallback for browser download
         const blob = new Blob([buffer], {
@@ -100,39 +149,232 @@ export const App: React.FC = () => {
         a.download = 'ตารางรายรับรายจ่าย.xlsx';
         a.click();
         URL.revokeObjectURL(url);
+        markSaved('ตารางรายรับรายจ่าย.xlsx');
         showToast(th.messages.fileSaved);
+        return true;
       }
     } catch (err: any) {
       showToast(th.messages.fileSaveFailed + (err.message || String(err)));
+      return false;
     }
   };
 
-  const handleSave = async () => {
+  // Save (handles unsupported overwrite warning on first Ctrl+S)
+  const handleSave = async (): Promise<boolean> => {
     if (!filePath) {
       return handleSaveAs();
     }
 
-    try {
-      const electronAPI = (window as any).electronAPI;
-      const buffer = await saveWorkbook();
+    if (unsupportedFeatures.length > 0 && !hasWarnedUnsupportedOverwrite) {
+      setUnsupportedOverwriteOpen(true);
+      return false;
+    }
 
-      if (electronAPI) {
-        const writeRes = await electronAPI.writeFile(filePath, Array.from(buffer));
-        if (writeRes.success) {
-          markSaved(filePath);
-          showToast(th.messages.fileSaved);
-        } else {
-          showToast(th.messages.fileSaveFailed + writeRes.error);
+    return executeSaveToPath(filePath);
+  };
+
+  // Unsaved Action Guard: if dirty, ask user before continuing (บันทึก / ไม่บันทึก / ยกเลิก)
+  const requestActionWithGuard = (action: (() => Promise<void> | void) | 'close') => {
+    if (isDirty) {
+      setPendingAction(() => (typeof action === 'function' ? action : action));
+      setUnsavedDialogOpen(true);
+    } else {
+      if (action === 'close') {
+        const electronAPI = (window as any).electronAPI;
+        if (electronAPI?.forceClose) {
+          electronAPI.forceClose();
         }
       } else {
-        handleSaveAs();
+        action();
       }
-    } catch (err: any) {
-      showToast(th.messages.fileSaveFailed + (err.message || String(err)));
     }
   };
 
-  // Keyboard shortcuts for File operations
+  // Handler for Unsaved Changes Dialog "Save" button
+  const handleUnsavedDialogSave = async () => {
+    setUnsavedDialogOpen(false);
+    const saveSuccess = await handleSave();
+    if (saveSuccess && pendingAction) {
+      if (pendingAction === 'close') {
+        const electronAPI = (window as any).electronAPI;
+        if (electronAPI?.forceClose) electronAPI.forceClose();
+      } else if (typeof pendingAction === 'function') {
+        await pendingAction();
+      }
+    }
+    setPendingAction(null);
+  };
+
+  // Handler for Unsaved Changes Dialog "Don't Save" button
+  const handleUnsavedDialogDontSave = async () => {
+    setUnsavedDialogOpen(false);
+    await clearRecoverySnapshot();
+    if (pendingAction) {
+      if (pendingAction === 'close') {
+        const electronAPI = (window as any).electronAPI;
+        if (electronAPI?.forceClose) electronAPI.forceClose();
+      } else if (typeof pendingAction === 'function') {
+        await pendingAction();
+      }
+    }
+    setPendingAction(null);
+  };
+
+  // Handler for Unsaved Changes Dialog "Cancel" button
+  const handleUnsavedDialogCancel = () => {
+    setUnsavedDialogOpen(false);
+    setPendingAction(null);
+  };
+
+  // New Workbook
+  const handleNew = () => {
+    requestActionWithGuard(() => {
+      newWorkbook();
+    });
+  };
+
+  // Open File
+  const handleOpen = () => {
+    requestActionWithGuard(async () => {
+      try {
+        const electronAPI = (window as any).electronAPI;
+        if (electronAPI) {
+          const res = await electronAPI.openFile();
+          if (res && !res.canceled && res.data) {
+            const uint8 = new Uint8Array(res.data);
+            await loadWorkbook(uint8, res.filePath);
+            showToast(th.messages.fileOpened);
+          }
+        } else {
+          // Fallback for browser testing
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.xlsx,.csv';
+          input.onchange = async (e: any) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const buf = await file.arrayBuffer();
+              await loadWorkbook(new Uint8Array(buf), file.name);
+              showToast(th.messages.fileOpened);
+            }
+          };
+          input.click();
+        }
+      } catch (err: any) {
+        showToast(th.messages.fileOpenFailed + (err.message || String(err)));
+      }
+    });
+  };
+
+  // Open Recent File
+  const handleOpenRecent = (targetPath: string) => {
+    requestActionWithGuard(async () => {
+      try {
+        const electronAPI = (window as any).electronAPI;
+        if (electronAPI) {
+          const exists = await electronAPI.checkFileExists(targetPath);
+          if (!exists) {
+            showToast(th.messages.recentFileNotFound.replace('{path}', targetPath));
+            await removeRecentFile(targetPath);
+            return;
+          }
+          const res = await electronAPI.readFile(targetPath);
+          if (res.success && res.data) {
+            await loadWorkbook(new Uint8Array(res.data), targetPath);
+            showToast(th.messages.fileOpened);
+          } else {
+            showToast(th.messages.fileOpenFailed + (res.error || ''));
+          }
+        }
+      } catch (err: any) {
+        showToast(th.messages.fileOpenFailed + (err.message || String(err)));
+      }
+    });
+  };
+
+  // Open file from external source (Open with / drag-drop / second instance)
+  const handleOpenExternal = useCallback(
+    (targetPath: string) => {
+      requestActionWithGuard(async () => {
+        try {
+          const electronAPI = (window as any).electronAPI;
+          if (electronAPI?.readFile) {
+            const res = await electronAPI.readFile(targetPath);
+            if (res.success && res.data) {
+              await loadWorkbook(new Uint8Array(res.data), targetPath);
+              showToast(th.messages.fileOpened);
+            } else {
+              showToast(th.messages.fileOpenFailed + (res.error || ''));
+            }
+          }
+        } catch (err: any) {
+          showToast(th.messages.fileOpenFailed + (err.message || String(err)));
+        }
+      });
+    },
+    [isDirty, loadWorkbook, showToast]
+  );
+
+  // Drag and Drop Handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.xlsx') && !lowerName.endsWith('.csv')) {
+      showToast(th.errors.dragDropUnsupported);
+      return;
+    }
+
+    const filePath = (file as any).path || file.name;
+
+    requestActionWithGuard(async () => {
+      try {
+        const buf = await file.arrayBuffer();
+        await loadWorkbook(new Uint8Array(buf), filePath);
+        showToast(th.messages.fileOpened);
+      } catch (err: any) {
+        showToast(th.messages.fileOpenFailed + (err.message || String(err)));
+      }
+    });
+  };
+
+  // Listen for Electron events (second instance Open with & window close interception)
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) return;
+
+    const unsubscribeOpenExternal = electronAPI.onOpenExternalFile((filePath: string) => {
+      handleOpenExternal(filePath);
+    });
+
+    const unsubscribeRequestClose = electronAPI.onRequestClose(() => {
+      requestActionWithGuard('close');
+    });
+
+    return () => {
+      if (unsubscribeOpenExternal) unsubscribeOpenExternal();
+      if (unsubscribeRequestClose) unsubscribeRequestClose();
+    };
+  }, [handleOpenExternal, isDirty]);
+
+  // Keyboard shortcuts
   useEffect(() => {
     updateTitle();
 
@@ -161,6 +403,9 @@ export const App: React.FC = () => {
 
   return (
     <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -170,13 +415,99 @@ export const App: React.FC = () => {
         position: 'relative',
       }}
     >
+      {/* Drag & Drop Visual Overlay */}
+      {isDraggingOver && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+            border: '3px dashed var(--color-primary)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '18px',
+            fontWeight: 600,
+            color: 'var(--color-primary)',
+            pointerEvents: 'none',
+          }}
+        >
+          📂 วางไฟล์ .xlsx หรือ .csv เพื่อเปิดใน SheetEasy
+        </div>
+      )}
+
       <Toolbar
         onNew={handleNew}
         onOpen={handleOpen}
+        onOpenRecent={handleOpenRecent}
         onSave={handleSave}
         onSaveAs={handleSaveAs}
       />
+
       <FormulaBar />
+
+      {/* Unsupported Features Warning Banner (SPEC 6.4) */}
+      {unsupportedFeatures.length > 0 && (
+        <div
+          style={{
+            backgroundColor: '#fef3c7',
+            color: '#92400e',
+            borderBottom: '1px solid #fcd34d',
+            padding: '7px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+            zIndex: 5,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>⚠️</span>
+            <span>
+              {th.banner.unsupportedFeatures.replace(
+                '{features}',
+                unsupportedFeatures.join(', ')
+              )}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              style={{
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: '#ffffff',
+                border: '1px solid #d97706',
+                color: '#92400e',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+              onClick={handleSaveAs}
+            >
+              💾 {th.banner.saveAsNewBtn}
+            </button>
+            <button
+              style={{
+                padding: '2px 8px',
+                fontSize: '13px',
+                background: 'transparent',
+                border: 'none',
+                color: '#92400e',
+                cursor: 'pointer',
+              }}
+              onClick={dismissUnsupportedBanner}
+              title={th.banner.dismiss}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <Grid />
       <StatusBar />
 
@@ -192,7 +523,7 @@ export const App: React.FC = () => {
             padding: '8px 16px',
             borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-            zIndex: 1000,
+            zIndex: 2000,
             fontSize: '13px',
             fontWeight: 500,
           }}
@@ -201,15 +532,51 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      <ConfirmDialog
-        isOpen={confirmNewOpen}
-        message={th.dialog.confirmNew}
-        onConfirm={() => {
-          setConfirmNewOpen(false);
-          newWorkbook();
+      {/* Unsaved Changes Dialog (SPEC 6.2 - บันทึก / ไม่บันทึก / ยกเลิก) */}
+      <UnsavedChangesDialog
+        isOpen={unsavedDialogOpen}
+        onSave={handleUnsavedDialogSave}
+        onDontSave={handleUnsavedDialogDontSave}
+        onCancel={handleUnsavedDialogCancel}
+      />
+
+      {/* Auto-Recovery Prompt Dialog (SPEC 6.3) */}
+      <RecoveryDialog
+        isOpen={recoveryDialogOpen}
+        recoveryItems={recoveryList}
+        onRecover={(item) => {
+          restoreRecoveryWorkbook(item.workbook, item.originalPath);
+          setRecoveryDialogOpen(false);
+          showToast(th.messages.recoveryRestored);
         }}
-        onCancel={() => setConfirmNewOpen(false)}
+        onDiscard={async () => {
+          const electronAPI = (window as any).electronAPI;
+          if (electronAPI?.clearAllRecovery) {
+            await electronAPI.clearAllRecovery();
+          }
+          setRecoveryDialogOpen(false);
+          showToast(th.messages.recoveryDiscarded);
+        }}
+      />
+
+      {/* Unsupported Overwrite Warning Dialog (SPEC 6.4) */}
+      <UnsupportedOverwriteDialog
+        isOpen={unsupportedOverwriteOpen}
+        features={unsupportedFeatures}
+        onOverwrite={async () => {
+          setHasWarnedUnsupportedOverwrite(true);
+          setUnsupportedOverwriteOpen(false);
+          if (filePath) {
+            await executeSaveToPath(filePath);
+          }
+        }}
+        onSaveAs={async () => {
+          setUnsupportedOverwriteOpen(false);
+          await handleSaveAs();
+        }}
+        onCancel={() => {
+          setUnsupportedOverwriteOpen(false);
+        }}
       />
 
       {/* Delete Row/Col Referenced Warning Modal */}

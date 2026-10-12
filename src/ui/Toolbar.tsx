@@ -6,6 +6,7 @@ import { NumFmt } from '../core/model';
 interface ToolbarProps {
   onNew: () => void;
   onOpen: () => void;
+  onOpenRecent: (path: string) => void;
   onSave: () => void;
   onSaveAs: () => void;
 }
@@ -17,7 +18,7 @@ const PRESET_COLORS = [
   '#bbf7d0', '#bfdbfe',
 ];
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveAs }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, onSave, onSaveAs }) => {
   const {
     undo,
     redo,
@@ -42,8 +43,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
     setFillColor,
     setBorder,
     openFormulaHelper,
+    recentFiles,
   } = useSheetStore();
 
+  const [recentMenuOpen, setRecentMenuOpen] = useState(false);
   const [sigmaMenuOpen, setSigmaMenuOpen] = useState(false);
   const [rowColMenuOpen, setRowColMenuOpen] = useState(false);
   const [textColorOpen, setTextColorOpen] = useState(false);
@@ -66,6 +69,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
   };
 
   const closeAllMenus = () => {
+    setRecentMenuOpen(false);
     setSigmaMenuOpen(false);
     setRowColMenuOpen(false);
     setTextColorOpen(false);
@@ -99,6 +103,81 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
       <button onClick={onOpen} title={th.toolbar.openFileTooltip}>
         📂 {th.toolbar.openFile}
       </button>
+
+      {/* Recent Files Dropdown */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            const next = !recentMenuOpen;
+            closeAllMenus();
+            setRecentMenuOpen(next);
+          }}
+          title={th.toolbar.recentFiles}
+        >
+          🕒 {th.toolbar.recentFiles} ▾
+        </button>
+        {recentMenuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 100,
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+              minWidth: '240px',
+              maxWidth: '380px',
+              marginTop: '4px',
+              padding: '6px 0',
+            }}
+          >
+            {recentFiles.length === 0 ? (
+              <div style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--fg-muted)' }}>
+                {th.toolbar.noRecentFiles}
+              </div>
+            ) : (
+              recentFiles.map((p) => {
+                const baseName = p.split(/[\\/]/).pop() || p;
+                return (
+                  <div
+                    key={p}
+                    onClick={() => {
+                      setRecentMenuOpen(false);
+                      onOpenRecent(p);
+                    }}
+                    title={p}
+                    style={{
+                      padding: '8px 14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid var(--border-color)',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-main)' }}>
+                      📄 {baseName}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--fg-muted)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {p}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
       <button className="primary" onClick={onSave} title={th.toolbar.saveFileTooltip}>
         💾 {th.toolbar.saveFile}
       </button>

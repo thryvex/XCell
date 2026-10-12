@@ -12,6 +12,7 @@ interface CellProps {
   isSelected: boolean;
   isActive: boolean;
   isCut?: boolean;
+  isUnsupportedFormula?: boolean;
   highlightColor?: string;
   style?: CellStyle;
   rowSpan?: number;
@@ -30,6 +31,7 @@ export const Cell: React.FC<CellProps> = ({
   isSelected,
   isActive,
   isCut,
+  isUnsupportedFormula,
   highlightColor,
   style,
   rowSpan,
@@ -46,7 +48,10 @@ export const Cell: React.FC<CellProps> = ({
     typeof computedValue === 'string' &&
     ['#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#CYCLE!', '#ERR'].includes(computedValue);
 
-  const tooltip = isError ? ERROR_TOOLTIP_MAP[computedValue as CellError] : undefined;
+  let tooltip = isError ? ERROR_TOOLTIP_MAP[computedValue as CellError] : undefined;
+  if (isUnsupportedFormula) {
+    tooltip = 'ฟังก์ชันนี้แอปยังไม่รองรับ แสดงค่าเดิมจากไฟล์';
+  }
 
   let textAlign = style?.align;
   if (!textAlign) {
@@ -110,6 +115,22 @@ export const Cell: React.FC<CellProps> = ({
         zIndex: isActive || highlightColor ? 2 : 1,
       }}
     >
+      {isUnsupportedFormula && (
+        <span
+          style={{
+            position: 'absolute',
+            top: '2px',
+            right: '2px',
+            fontSize: '10px',
+            lineHeight: 1,
+            color: '#d97706',
+            pointerEvents: 'none',
+          }}
+          title={tooltip}
+        >
+          ⚠️
+        </span>
+      )}
       {displayValue}
     </td>
   );

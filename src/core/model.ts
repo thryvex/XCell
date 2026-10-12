@@ -24,6 +24,8 @@ export type Cell = {
   raw: string; // สิ่งที่ผู้ใช้พิมพ์ ถ้าขึ้นต้นด้วย "=" คือสูตร
   fmt?: NumFmt;
   style?: CellStyle;
+  unsupportedFormula?: boolean;
+  cachedValue?: CellValue;
 };
 
 export type MergeRange = {
@@ -46,6 +48,7 @@ export type Sheet = {
 export type Workbook = {
   sheets: Sheet[];
   activeSheet: number;
+  unsupportedFeatures?: string[];
 };
 
 export type CellError = '#DIV/0!' | '#VALUE!' | '#REF!' | '#NAME?' | '#CYCLE!' | '#ERR';

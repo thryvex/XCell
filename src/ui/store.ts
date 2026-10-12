@@ -124,6 +124,20 @@ export interface SheetState {
   openFormulaHelper: () => void;
   closeFormulaHelper: () => void;
   insertFormulaFunction: (fnName: string) => void;
+
+  // Phase 3C state & actions
+  recentFiles: string[];
+  fetchRecentFiles: () => Promise<void>;
+  addRecentFile: (filePath: string) => Promise<void>;
+  removeRecentFile: (filePath: string) => Promise<void>;
+  recoverySessionId: string;
+  saveRecoverySnapshot: () => Promise<void>;
+  clearRecoverySnapshot: () => Promise<void>;
+  restoreRecoveryWorkbook: (recoveredWb: Workbook, origPath: string | null) => void;
+  unsupportedFeatures: string[];
+  hasWarnedUnsupportedOverwrite: boolean;
+  setHasWarnedUnsupportedOverwrite: (warned: boolean) => void;
+  dismissUnsupportedBanner: () => void;
 }
 
 const initialWb = createEmptyWorkbook();
@@ -148,6 +162,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   cutRange: null,
   pendingDelete: null,
   isFormulaHelperOpen: false,
+  recentFiles: [],
+  recoverySessionId: `recovery-${Date.now()}`,
+  unsupportedFeatures: [],
+  hasWarnedUnsupportedOverwrite: false,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -665,6 +683,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   newWorkbook: () => {
+    get().clearRecoverySnapshot();
     const newWb = createEmptyWorkbook();
     const newEval = new Evaluator(newWb.sheets[0]);
     const newHist = new HistoryManager(100);
@@ -683,17 +702,27 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       history: newHist,
       clipboard: null,
       cutRange: null,
+      recoverySessionId: `recovery-${Date.now()}`,
+      unsupportedFeatures: [],
+      hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
   },
 
   loadWorkbook: async (data: Uint8Array, filePath?: string) => {
+    // Clear old recovery snapshot before loading new file
+    await get().clearRecoverySnapshot();
+
     const wb = await importFromXlsxBuffer(data);
     const evalInstance = new Evaluator(wb.sheets[0]);
     const histInstance = new HistoryManager(100);
     const fileName = filePath
       ? filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'ตารางบันทึก'
       : 'ตารางบันทึก';
+
+    if (filePath) {
+      get().addRecentFile(filePath);
+    }
 
     set({
       workbook: wb,
@@ -709,6 +738,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       history: histInstance,
       clipboard: null,
       cutRange: null,
+      recoverySessionId: `recovery-${Date.now()}`,
+      unsupportedFeatures: wb.unsupportedFeatures || [],
+      hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
   },
@@ -720,12 +752,105 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   markSaved: (filePath: string) => {
     const fileName = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'ตารางบันทึก';
+    get().addRecentFile(filePath);
+    get().clearRecoverySnapshot();
     set({
       filePath,
       fileName,
       isDirty: false,
+      recoverySessionId: `recovery-${Date.now()}`,
     });
     get().updateTitle();
+  },
+
+  fetchRecentFiles: async () => {
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.getRecentFiles) {
+      try {
+        const list = await electronAPI.getRecentFiles();
+        if (Array.isArray(list)) set({ recentFiles: list });
+      } catch {}
+    }
+  },
+
+  addRecentFile: async (filePath: string) => {
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.addRecentFile) {
+      try {
+        const list = await electronAPI.addRecentFile(filePath);
+        if (Array.isArray(list)) set({ recentFiles: list });
+      } catch {}
+    }
+  },
+
+  removeRecentFile: async (filePath: string) => {
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.removeRecentFile) {
+      try {
+        const list = await electronAPI.removeRecentFile(filePath);
+        if (Array.isArray(list)) set({ recentFiles: list });
+      } catch {}
+    }
+  },
+
+  saveRecoverySnapshot: async () => {
+    const { workbook, filePath, fileName, isDirty, recoverySessionId } = get();
+    if (!isDirty) return;
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.saveRecovery) {
+      try {
+        await electronAPI.saveRecovery({
+          id: recoverySessionId,
+          originalPath: filePath,
+          fileName,
+          savedAt: Date.now(),
+          workbook,
+        });
+      } catch {}
+    }
+  },
+
+  clearRecoverySnapshot: async () => {
+    const { recoverySessionId } = get();
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.deleteRecovery) {
+      try {
+        await electronAPI.deleteRecovery(recoverySessionId);
+      } catch {}
+    }
+  },
+
+  restoreRecoveryWorkbook: (recoveredWb: Workbook, origPath: string | null) => {
+    const evalInstance = new Evaluator(recoveredWb.sheets[0]);
+    const histInstance = new HistoryManager(100);
+    const fileName = origPath
+      ? origPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'ตารางกู้คืน'
+      : 'ตารางกู้คืน';
+
+    set({
+      workbook: recoveredWb,
+      activeSheetIndex: 0,
+      activeCell: { r: 0, c: 0 },
+      selection: { r1: 0, c1: 0, r2: 0, c2: 0 },
+      isEditing: false,
+      editingValue: '',
+      filePath: origPath,
+      fileName,
+      isDirty: true,
+      evaluator: evalInstance,
+      history: histInstance,
+      unsupportedFeatures: recoveredWb.unsupportedFeatures || [],
+      hasWarnedUnsupportedOverwrite: false,
+    });
+    get().updateTitle();
+  },
+
+  setHasWarnedUnsupportedOverwrite: (warned: boolean) => {
+    set({ hasWarnedUnsupportedOverwrite: warned });
+  },
+
+  dismissUnsupportedBanner: () => {
+    set({ unsupportedFeatures: [] });
   },
 
   getRawValue: (r: number, c: number) => {

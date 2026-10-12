@@ -1,9 +1,10 @@
 import ExcelJS from 'exceljs';
-import { Workbook, Sheet, Cell, CellStyle, NumFmt, MergeRange, createEmptySheet } from './model';
+import { Workbook, Sheet, Cell, CellStyle, NumFmt, MergeRange, createEmptySheet, CellValue } from './model';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseA1 } from './address';
 import { dateToSerial, THAI_TO_ERROR_MAP } from './numfmt';
-import { isCellError } from './functions';
+import { isCellError, FUNCTIONS } from './functions';
+import { tokenize } from './tokenizer';
 
 const NUM_FMT_EXCEL: Record<string, string> = {
   number2: '#,##0.00',
@@ -88,14 +89,20 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
       if (raw.startsWith('=')) {
         // Formula: replace aliases like MEAN -> AVERAGE for Google Sheets compatibility
         const formulaStr = raw.slice(1).replace(/\bMEAN\(/gi, 'AVERAGE(');
-        const computed = evaluator.getCellValue(key);
-        let resultVal: any = typeof computed === 'number' || typeof computed === 'string' ? computed : undefined;
+        let resultVal: any = undefined;
 
-        if (typeof computed === 'string' && (isCellError(computed) || computed in THAI_TO_ERROR_MAP)) {
-          let errCode = isCellError(computed) ? computed : THAI_TO_ERROR_MAP[computed];
-          if (errCode === '#CYCLE!') errCode = '#REF!';
-          if (errCode === '#ERR') errCode = '#VALUE!';
-          resultVal = { error: errCode };
+        if (cellData.unsupportedFormula && cellData.cachedValue !== undefined) {
+          resultVal = cellData.cachedValue;
+        } else {
+          const computed = evaluator.getCellValue(key);
+          resultVal = typeof computed === 'number' || typeof computed === 'string' ? computed : undefined;
+
+          if (typeof computed === 'string' && (isCellError(computed) || computed in THAI_TO_ERROR_MAP)) {
+            let errCode = isCellError(computed) ? computed : THAI_TO_ERROR_MAP[computed];
+            if (errCode === '#CYCLE!') errCode = '#REF!';
+            if (errCode === '#ERR') errCode = '#VALUE!';
+            resultVal = { error: errCode };
+          }
         }
 
         excelCell.value = {
@@ -170,10 +177,91 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
 }
 
 /**
+ * Detects features in an ExcelJS Workbook that are unsupported by SheetEasy (SPEC 6.4)
+ */
+export function detectUnsupportedFeatures(excelWorkbook: ExcelJS.Workbook): string[] {
+  const features = new Set<string>();
+
+  if ((excelWorkbook as any).pivotTables && (excelWorkbook as any).pivotTables.length > 0) {
+    features.add('ตาราง Pivot');
+  }
+
+  excelWorkbook.eachSheet((ws) => {
+    // 1. Hidden sheets
+    if (ws.state === 'hidden' || ws.state === 'veryHidden') {
+      features.add('แผ่นงานที่ซ่อนอยู่ (Hidden Sheets)');
+    }
+
+    // 2. Images
+    if (
+      (typeof ws.getImages === 'function' && ws.getImages().length > 0) ||
+      ((ws as any).media && (ws as any).media.length > 0)
+    ) {
+      features.add('รูปภาพ');
+    }
+
+    // 3. Charts / Drawings
+    if (
+      ((ws as any).drawings && (ws as any).drawings.length > 0) ||
+      ((ws as any)._drawings && (ws as any)._drawings.length > 0) ||
+      Boolean((ws.model as any)?.drawing)
+    ) {
+      features.add('แผนภูมิ/กราฟ');
+    }
+
+    // 4. Pivot tables
+    if (
+      ((ws as any).pivotTables && (ws as any).pivotTables.length > 0) ||
+      Boolean((ws.model as any)?.pivotTables && (ws.model as any).pivotTables.length > 0)
+    ) {
+      features.add('ตาราง Pivot');
+    }
+
+    // 5. Conditional formatting
+    if (
+      ((ws as any).conditionalFormattings && (ws as any).conditionalFormattings.length > 0) ||
+      Boolean((ws.model as any)?.conditionalFormatting && (ws.model as any).conditionalFormatting.length > 0)
+    ) {
+      features.add('การจัดรูปแบบตามเงื่อนไข (Conditional Formatting)');
+    }
+
+    // 6. Data validation
+    const dvModel = (ws as any).dataValidations?.model || (ws.model as any)?.dataValidations;
+    if (dvModel && Object.keys(dvModel).length > 0) {
+      features.add('การตรวจสอบความถูกต้องของข้อมูล (Data Validation)');
+    }
+  });
+
+  return Array.from(features);
+}
+
+/**
+ * Checks if a formula string contains any functions not supported by SheetEasy
+ */
+export function hasUnsupportedFunction(formulaStr: string): boolean {
+  if (!formulaStr.startsWith('=')) return false;
+  try {
+    const tokens = tokenize(formulaStr);
+    for (const t of tokens) {
+      if (t.type === 'FUNCTION') {
+        const fnName = t.value.toUpperCase();
+        if (!FUNCTIONS[fnName] && fnName !== 'MEAN') {
+          return true;
+        }
+      }
+    }
+  } catch {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Converts an ExcelJS Workbook to a SheetEasy Workbook model
  */
 export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promise<Workbook> {
   const sheets: Sheet[] = [];
+  const unsupportedFeatures = detectUnsupportedFeatures(excelWorkbook);
 
   excelWorkbook.eachSheet((ws, sheetId) => {
     const sheet: Sheet = createEmptySheet(ws.name || `Sheet${sheetId}`);
@@ -192,11 +280,27 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
         let raw = '';
         let fmt: NumFmt | undefined = undefined;
         const style: CellStyle = {};
+        let isUnsupportedFormula = false;
+        let cachedVal: CellValue | undefined = undefined;
 
         // Parse value & formula
         if (cell.type === ExcelJS.ValueType.Formula) {
           const f = cell.formula;
           raw = f ? `=${f}` : '';
+
+          // Extract cached result
+          const res = cell.result;
+          if (res !== null && res !== undefined) {
+            if (typeof res === 'number' || typeof res === 'string' || typeof res === 'boolean') {
+              cachedVal = res;
+            } else if (typeof res === 'object' && 'error' in res) {
+              cachedVal = (res as any).error;
+            }
+          }
+
+          if (hasUnsupportedFunction(raw)) {
+            isUnsupportedFormula = true;
+          }
         } else if (
           cell.type === ExcelJS.ValueType.Error ||
           (cell.value && typeof cell.value === 'object' && 'error' in cell.value)
@@ -250,6 +354,10 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
         }
 
         const cellRecord: Cell = { raw };
+        if (isUnsupportedFormula) {
+          cellRecord.unsupportedFormula = true;
+          cellRecord.cachedValue = cachedVal;
+        }
         if (fmt) cellRecord.fmt = fmt;
         if (Object.keys(style).length > 0) cellRecord.style = style;
 
@@ -282,6 +390,7 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
   return {
     sheets: sheets.length > 0 ? sheets : [createEmptySheet('Sheet1')],
     activeSheet: 0,
+    unsupportedFeatures: unsupportedFeatures.length > 0 ? unsupportedFeatures : undefined,
   };
 }
 

@@ -762,6 +762,7 @@ export const Grid: React.FC = () => {
                         isSelected={isSelected}
                         isActive={isActive}
                         isCut={isCut}
+                        isUnsupportedFormula={Boolean(cellData?.unsupportedFormula)}
                         highlightColor={highlightColor}
                         style={cellData?.style}
                         rowSpan={merge ? merge.r2 - merge.r1 + 1 : undefined}

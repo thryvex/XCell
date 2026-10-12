@@ -292,6 +292,12 @@ export class Evaluator {
       return '';
     }
 
+    // Preserve cached value for unsupported formulas
+    if (cell.unsupportedFormula && cell.cachedValue !== undefined) {
+      this.cache[key] = cell.cachedValue;
+      return cell.cachedValue;
+    }
+
     const raw = cell.raw.trim();
 
     // Plain text escaping with leading single quote: 'hello
