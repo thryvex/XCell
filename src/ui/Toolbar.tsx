@@ -10,6 +10,13 @@ interface ToolbarProps {
   onSaveAs: () => void;
 }
 
+const PRESET_COLORS = [
+  '#000000', '#434343', '#666666', '#999999', '#cccccc', '#ffffff',
+  '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4',
+  '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#fecaca', '#fed7aa',
+  '#bbf7d0', '#bfdbfe',
+];
+
 export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveAs }) => {
   const {
     undo,
@@ -25,10 +32,24 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
     insertColAt,
     deleteColAt,
     addRowsAtBottom,
+    getActiveCellStyle,
+    toggleBold,
+    toggleItalic,
+    toggleUnderline,
+    toggleWrap,
+    setAlignment,
+    setTextColor,
+    setFillColor,
+    setBorder,
   } = useSheetStore();
 
   const [sigmaMenuOpen, setSigmaMenuOpen] = useState(false);
   const [rowColMenuOpen, setRowColMenuOpen] = useState(false);
+  const [textColorOpen, setTextColorOpen] = useState(false);
+  const [fillColorOpen, setFillColorOpen] = useState(false);
+  const [borderMenuOpen, setBorderMenuOpen] = useState(false);
+
+  const activeStyle = getActiveCellStyle();
 
   const handleFmtChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as NumFmt;
@@ -42,6 +63,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
     applySigma(fn);
     setSigmaMenuOpen(false);
   };
+
+  const closeAllMenus = () => {
+    setSigmaMenuOpen(false);
+    setRowColMenuOpen(false);
+    setTextColorOpen(false);
+    setFillColorOpen(false);
+    setBorderMenuOpen(false);
+  };
+
+  const activeBtnStyle = (isActive?: boolean): React.CSSProperties => ({
+    backgroundColor: isActive ? 'var(--color-primary)' : 'transparent',
+    color: isActive ? '#ffffff' : 'var(--fg-main)',
+    borderColor: isActive ? 'var(--color-primary)' : 'var(--border-color)',
+    fontWeight: isActive ? 600 : 400,
+  });
 
   return (
     <div
@@ -81,6 +117,315 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
 
+      {/* Text formatting: Bold, Italic, Underline */}
+      <button
+        style={{ ...activeBtnStyle(activeStyle.bold), fontWeight: 'bold', width: '32px' }}
+        onClick={toggleBold}
+        title={th.toolbar.bold}
+      >
+        B
+      </button>
+      <button
+        style={{ ...activeBtnStyle(activeStyle.italic), fontStyle: 'italic', width: '32px' }}
+        onClick={toggleItalic}
+        title={th.toolbar.italic}
+      >
+        I
+      </button>
+      <button
+        style={{ ...activeBtnStyle(activeStyle.underline), textDecoration: 'underline', width: '32px' }}
+        onClick={toggleUnderline}
+        title={th.toolbar.underline}
+      >
+        U
+      </button>
+
+      {/* Text color dropdown */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            const next = !textColorOpen;
+            closeAllMenus();
+            setTextColorOpen(next);
+          }}
+          title={th.toolbar.textColor}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '34px', padding: '2px 6px' }}
+        >
+          <span style={{ fontWeight: 600, fontSize: '13px' }}>A</span>
+          <span
+            style={{
+              width: '18px',
+              height: '3px',
+              backgroundColor: activeStyle.color || 'var(--fg-main)',
+              marginTop: '1px',
+              borderRadius: '1px',
+            }}
+          />
+        </button>
+
+        {textColorOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 100,
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              padding: '8px',
+              minWidth: '180px',
+              marginTop: '4px',
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', marginBottom: '8px' }}>
+              {PRESET_COLORS.map((hex) => (
+                <div
+                  key={hex}
+                  onClick={() => {
+                    setTextColor(hex);
+                    setTextColorOpen(false);
+                  }}
+                  title={hex}
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    backgroundColor: hex,
+                    borderRadius: '4px',
+                    border: activeStyle.color === hex ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <label style={{ fontSize: '12px', flex: 1 }}>{th.toolbar.customColor}:</label>
+              <input
+                type="color"
+                value={activeStyle.color || '#000000'}
+                onChange={(e) => {
+                  setTextColor(e.target.value);
+                  setTextColorOpen(false);
+                }}
+                style={{ width: '28px', height: '24px', padding: 0, border: 'none', cursor: 'pointer' }}
+              />
+            </div>
+            <button
+              onClick={() => {
+                setTextColor(undefined);
+                setTextColorOpen(false);
+              }}
+              style={{ width: '100%', fontSize: '12px', padding: '4px' }}
+            >
+              {th.toolbar.colorDefault}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Fill color dropdown */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            const next = !fillColorOpen;
+            closeAllMenus();
+            setFillColorOpen(next);
+          }}
+          title={th.toolbar.fillColor}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '34px', padding: '2px 6px' }}
+        >
+          <span style={{ fontSize: '13px' }}>🎨</span>
+          <span
+            style={{
+              width: '18px',
+              height: '3px',
+              backgroundColor: activeStyle.fill || 'transparent',
+              border: activeStyle.fill ? 'none' : '1px dashed var(--border-color)',
+              marginTop: '1px',
+              borderRadius: '1px',
+            }}
+          />
+        </button>
+
+        {fillColorOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 100,
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              padding: '8px',
+              minWidth: '180px',
+              marginTop: '4px',
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', marginBottom: '8px' }}>
+              {PRESET_COLORS.map((hex) => (
+                <div
+                  key={hex}
+                  onClick={() => {
+                    setFillColor(hex);
+                    setFillColorOpen(false);
+                  }}
+                  title={hex}
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    backgroundColor: hex,
+                    borderRadius: '4px',
+                    border: activeStyle.fill === hex ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <label style={{ fontSize: '12px', flex: 1 }}>{th.toolbar.customColor}:</label>
+              <input
+                type="color"
+                value={activeStyle.fill || '#ffffff'}
+                onChange={(e) => {
+                  setFillColor(e.target.value);
+                  setFillColorOpen(false);
+                }}
+                style={{ width: '28px', height: '24px', padding: 0, border: 'none', cursor: 'pointer' }}
+              />
+            </div>
+            <button
+              onClick={() => {
+                setFillColor(undefined);
+                setFillColorOpen(false);
+              }}
+              style={{ width: '100%', fontSize: '12px', padding: '4px' }}
+            >
+              {th.toolbar.colorDefault}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+
+      {/* Alignment group: Left, Center, Right */}
+      <button
+        style={{ ...activeBtnStyle(activeStyle.align === 'left'), width: '32px' }}
+        onClick={() => setAlignment('left')}
+        title={th.toolbar.alignLeft}
+      >
+        ≡⇤
+      </button>
+      <button
+        style={{ ...activeBtnStyle(activeStyle.align === 'center'), width: '32px' }}
+        onClick={() => setAlignment('center')}
+        title={th.toolbar.alignCenter}
+      >
+        ≡
+      </button>
+      <button
+        style={{ ...activeBtnStyle(activeStyle.align === 'right'), width: '32px' }}
+        onClick={() => setAlignment('right')}
+        title={th.toolbar.alignRight}
+      >
+        ⇥≡
+      </button>
+
+      {/* Text wrap toggle */}
+      <button
+        style={activeBtnStyle(activeStyle.wrap)}
+        onClick={toggleWrap}
+        title={th.toolbar.wrapText}
+      >
+        ↵ {th.toolbar.wrapText}
+      </button>
+
+      {/* Border menu */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            const next = !borderMenuOpen;
+            closeAllMenus();
+            setBorderMenuOpen(next);
+          }}
+          title={th.toolbar.borders}
+          style={activeBtnStyle(activeStyle.border && activeStyle.border !== 'none')}
+        >
+          田 {th.toolbar.borders} ▾
+        </button>
+
+        {borderMenuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 100,
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: '150px',
+              marginTop: '4px',
+              padding: '4px 0',
+            }}
+          >
+            <button
+              style={{
+                border: 'none',
+                background: 'transparent',
+                justifyContent: 'flex-start',
+                padding: '6px 12px',
+                fontWeight: !activeStyle.border || activeStyle.border === 'none' ? 600 : 400,
+              }}
+              onClick={() => {
+                setBorder('none');
+                setBorderMenuOpen(false);
+              }}
+            >
+              ◻ {th.toolbar.borderNone}
+            </button>
+            <button
+              style={{
+                border: 'none',
+                background: 'transparent',
+                justifyContent: 'flex-start',
+                padding: '6px 12px',
+                fontWeight: activeStyle.border === 'all' ? 600 : 400,
+              }}
+              onClick={() => {
+                setBorder('all');
+                setBorderMenuOpen(false);
+              }}
+            >
+              田 {th.toolbar.borderAll}
+            </button>
+            <button
+              style={{
+                border: 'none',
+                background: 'transparent',
+                justifyContent: 'flex-start',
+                padding: '6px 12px',
+                fontWeight: activeStyle.border === 'outer' ? 600 : 400,
+              }}
+              onClick={() => {
+                setBorder('outer');
+                setBorderMenuOpen(false);
+              }}
+            >
+              回 {th.toolbar.borderOuter}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+
       {/* Merge group */}
       <button onClick={() => mergeCells()} title={th.toolbar.mergeCellsTooltip}>
         ⊞ {th.toolbar.mergeCells}
@@ -117,8 +462,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
       <div style={{ position: 'relative', display: 'inline-block' }}>
         <button
           onClick={() => {
-            setRowColMenuOpen(!rowColMenuOpen);
-            setSigmaMenuOpen(false);
+            const next = !rowColMenuOpen;
+            closeAllMenus();
+            setRowColMenuOpen(next);
           }}
           title="จัดการแถวและคอลัมน์"
         >
@@ -216,7 +562,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onSave, onSaveA
       {/* Sigma menu */}
       <div style={{ position: 'relative', display: 'inline-block' }}>
         <button
-          onClick={() => setSigmaMenuOpen(!sigmaMenuOpen)}
+          onClick={() => {
+            const next = !sigmaMenuOpen;
+            closeAllMenus();
+            setSigmaMenuOpen(next);
+          }}
           title={th.toolbar.sigmaTooltip}
           style={{ fontWeight: 600 }}
         >

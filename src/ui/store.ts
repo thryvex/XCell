@@ -3,6 +3,7 @@ import {
   Workbook,
   Sheet,
   Cell,
+  CellStyle,
   NumFmt,
   MergeRange,
   createEmptyWorkbook,
@@ -95,6 +96,18 @@ export interface SheetState {
   fillDownAction: () => void;
   fillRightAction: () => void;
   cycleCurrentReference: () => void;
+
+  // Phase 3A styling actions
+  getActiveCellStyle: () => CellStyle;
+  setCellStyle: (stylePatch: Partial<CellStyle>) => void;
+  toggleBold: () => void;
+  toggleItalic: () => void;
+  toggleUnderline: () => void;
+  toggleWrap: () => void;
+  setAlignment: (align?: 'left' | 'center' | 'right') => void;
+  setTextColor: (color?: string) => void;
+  setFillColor: (fill?: string) => void;
+  setBorder: (border?: 'none' | 'all' | 'outer') => void;
 }
 
 const initialWb = createEmptyWorkbook();
@@ -358,6 +371,94 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     });
     set({ workbook: { ...workbook }, isDirty: true });
     updateTitle();
+  },
+
+  getActiveCellStyle: () => {
+    const { workbook, activeSheetIndex, activeCell } = get();
+    const sheet = workbook.sheets[activeSheetIndex];
+    const key = cellToA1(activeCell.r, activeCell.c);
+    return sheet.cells[key]?.style || {};
+  },
+
+  setCellStyle: (stylePatch: Partial<CellStyle>) => {
+    const { selection, workbook, activeSheetIndex, history, updateTitle } = get();
+    const sheet = workbook.sheets[activeSheetIndex];
+    const patches: any[] = [];
+
+    for (let r = selection.r1; r <= selection.r2; r++) {
+      for (let c = selection.c1; c <= selection.c2; c++) {
+        const key = cellToA1(r, c);
+        const cell = sheet.cells[key] || { raw: '' };
+        const prevStyle = cell.style ? { ...cell.style } : {};
+        const mergedStyle: CellStyle = { ...prevStyle, ...stylePatch };
+
+        const cleanStyle: CellStyle = {};
+        for (const [k, v] of Object.entries(mergedStyle)) {
+          if (v !== undefined && v !== null && v !== '' && v !== 'none') {
+            (cleanStyle as any)[k] = v;
+          }
+        }
+
+        const newStyle = Object.keys(cleanStyle).length > 0 ? cleanStyle : undefined;
+        const newCell: Cell = { ...cell, style: newStyle };
+
+        patches.push({
+          key,
+          before: sheet.cells[key] ? { ...sheet.cells[key] } : undefined,
+          after: newCell,
+        });
+
+        sheet.cells[key] = newCell;
+      }
+    }
+
+    if (patches.length > 0) {
+      history.push({
+        description: 'Format cells',
+        sheetIndex: activeSheetIndex,
+        patch: { cellPatches: patches },
+      });
+      set({ workbook: { ...workbook }, isDirty: true });
+      updateTitle();
+    }
+  },
+
+  toggleBold: () => {
+    const current = get().getActiveCellStyle();
+    get().setCellStyle({ bold: current.bold ? undefined : true });
+  },
+
+  toggleItalic: () => {
+    const current = get().getActiveCellStyle();
+    get().setCellStyle({ italic: current.italic ? undefined : true });
+  },
+
+  toggleUnderline: () => {
+    const current = get().getActiveCellStyle();
+    get().setCellStyle({ underline: current.underline ? undefined : true });
+  },
+
+  toggleWrap: () => {
+    const current = get().getActiveCellStyle();
+    get().setCellStyle({ wrap: current.wrap ? undefined : true });
+  },
+
+  setAlignment: (align?: 'left' | 'center' | 'right') => {
+    const current = get().getActiveCellStyle();
+    const newAlign = current.align === align ? undefined : align;
+    get().setCellStyle({ align: newAlign });
+  },
+
+  setTextColor: (color?: string) => {
+    get().setCellStyle({ color: color || undefined });
+  },
+
+  setFillColor: (fill?: string) => {
+    get().setCellStyle({ fill: fill || undefined });
+  },
+
+  setBorder: (border?: 'none' | 'all' | 'outer') => {
+    get().setCellStyle({ border: border === 'none' ? undefined : border });
   },
 
   mergeCells: () => {
@@ -717,8 +818,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
             sheet.cells[destKey] = {
               raw: rawVal,
-              fmt: srcCell?.fmt,
-              style: srcCell?.style,
+              fmt: valuesOnly ? prev?.fmt : srcCell?.fmt,
+              style: valuesOnly
+                ? (prev?.style ? { ...prev.style } : undefined)
+                : (srcCell?.style ? { ...srcCell.style } : undefined),
             };
             evaluator.invalidate(destKey);
             patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
@@ -746,8 +849,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
           sheet.cells[destKey] = {
             raw: rawVal,
-            fmt: cell.fmt,
-            style: cell.style,
+            fmt: valuesOnly ? prev?.fmt : cell.fmt,
+            style: valuesOnly
+              ? (prev?.style ? { ...prev.style } : undefined)
+              : (cell.style ? { ...cell.style } : undefined),
           };
           evaluator.invalidate(destKey);
           patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
@@ -795,9 +900,13 @@ export const useSheetStore = create<SheetState>((set, get) => ({
             const prev = sheet.cells[destKey] ? { ...sheet.cells[destKey] } : undefined;
             const rawVal = grid[i][j];
 
-            sheet.cells[destKey] = { raw: rawVal };
+            sheet.cells[destKey] = {
+              raw: rawVal,
+              fmt: prev?.fmt,
+              style: prev?.style ? { ...prev.style } : undefined,
+            };
             evaluator.invalidate(destKey);
-            patches.push({ key: destKey, before: prev, after: { raw: rawVal } });
+            patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
           }
         }
 

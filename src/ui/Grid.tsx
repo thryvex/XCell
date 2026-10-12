@@ -58,6 +58,9 @@ export const Grid: React.FC = () => {
     fillDownAction,
     fillRightAction,
     cycleCurrentReference,
+    toggleBold,
+    toggleItalic,
+    toggleUnderline,
     undo,
     redo,
     mergeCells,
@@ -201,6 +204,24 @@ export const Grid: React.FC = () => {
       if (isCtrl && e.key.toLowerCase() === 'r') {
         e.preventDefault();
         fillRightAction();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleBold();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        toggleItalic();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'u') {
+        e.preventDefault();
+        toggleUnderline();
         return;
       }
 

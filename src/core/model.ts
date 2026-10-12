@@ -7,6 +7,8 @@ export type CellStyle = {
   align?: 'left' | 'center' | 'right';
   wrap?: boolean;
   border?: 'none' | 'all' | 'outer';
+  fontSize?: number; // สำหรับเก็บรักษาเมื่อเปิดจากไฟล์ภายนอก
+  fontFamily?: string; // สำหรับเก็บรักษาเมื่อเปิดจากไฟล์ภายนอก
 };
 
 export type NumFmt =

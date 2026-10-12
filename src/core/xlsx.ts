@@ -18,10 +18,10 @@ function argbToHex(argb?: string): string | undefined {
   // ExcelJS returns ARGB e.g. "FFFF0000" or 6-digit hex
   const clean = argb.replace(/^#/g, '');
   if (clean.length === 8) {
-    return '#' + clean.slice(2);
+    return '#' + clean.slice(2).toLowerCase();
   }
   if (clean.length === 6) {
-    return '#' + clean;
+    return '#' + clean.toLowerCase();
   }
   return undefined;
 }
@@ -114,6 +114,8 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
         if (st.italic !== undefined) font.italic = st.italic;
         if (st.underline !== undefined) font.underline = st.underline;
         if (st.color) font.color = { argb: hexToArgb(st.color) };
+        if (st.fontSize !== undefined) font.size = st.fontSize;
+        if (st.fontFamily) font.name = st.fontFamily;
         if (Object.keys(font).length > 0) excelCell.font = font;
 
         if (st.fill) {
@@ -205,6 +207,8 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
           if (cell.font.color?.argb) {
             style.color = argbToHex(cell.font.color.argb);
           }
+          if (cell.font.size) style.fontSize = cell.font.size;
+          if (cell.font.name) style.fontFamily = cell.font.name;
         }
 
         if (cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb) {
@@ -220,7 +224,7 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
           }
         }
 
-        if (cell.border && (cell.border.top || cell.border.bottom)) {
+        if (cell.border && (cell.border.top || cell.border.bottom || cell.border.left || cell.border.right)) {
           style.border = 'all';
         }
 
