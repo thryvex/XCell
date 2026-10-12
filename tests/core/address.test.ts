@@ -7,6 +7,7 @@ import {
   parseRange,
   rangeToA1,
   isCellInRange,
+  cycleReference,
 } from '../../src/core/address';
 
 describe('src/core/address', () => {
@@ -77,5 +78,13 @@ describe('src/core/address', () => {
     expect(isCellInRange(5, 5, range)).toBe(true);
     expect(isCellInRange(0, 1, range)).toBe(false);
     expect(isCellInRange(6, 2, range)).toBe(false);
+  });
+
+  it('cycles references with F4 (cycleReference)', () => {
+    expect(cycleReference('A1')).toBe('$A$1');
+    expect(cycleReference('$A$1')).toBe('A$1');
+    expect(cycleReference('A$1')).toBe('$A1');
+    expect(cycleReference('$A1')).toBe('A1');
+    expect(cycleReference('A1:B10')).toBe('$A$1:$B$10');
   });
 });

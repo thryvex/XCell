@@ -109,3 +109,34 @@ export function rangeToA1(r1: number, c1: number, r2: number, c2: number): strin
 export function isCellInRange(r: number, c: number, range: { r1: number; c1: number; r2: number; c2: number }): boolean {
   return r >= range.r1 && r <= range.r2 && c >= range.c1 && c <= range.c2;
 }
+
+/**
+ * Cycles reference between A1 -> $A$1 -> A$1 -> $A1 -> A1 (F4 key behavior)
+ */
+export function cycleReference(ref: string): string {
+  if (!ref) return ref;
+  if (ref.includes(':')) {
+    const parts = ref.split(':');
+    if (parts.length === 2) {
+      return `${cycleReference(parts[0])}:${cycleReference(parts[1])}`;
+    }
+    return ref;
+  }
+
+  const p = parseA1(ref);
+  if (!p) return ref;
+
+  if (!p.colAbs && !p.rowAbs) {
+    // A1 -> $A$1
+    return cellToA1(p.r, p.c, true, true);
+  } else if (p.colAbs && p.rowAbs) {
+    // $A$1 -> A$1
+    return cellToA1(p.r, p.c, false, true);
+  } else if (!p.colAbs && p.rowAbs) {
+    // A$1 -> $A1
+    return cellToA1(p.r, p.c, true, false);
+  } else {
+    // $A1 -> A1
+    return cellToA1(p.r, p.c, false, false);
+  }
+}

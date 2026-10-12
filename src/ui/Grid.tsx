@@ -1,13 +1,24 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { useSheetStore } from './store';
+import { useSheetStore, SelectionState } from './store';
 import { Cell } from './Cell';
-import { colToStr, cellToA1 } from '../core/address';
+import { ContextMenu } from './ContextMenu';
+import { colToStr, cellToA1, parseRange } from '../core/address';
+import { tokenize } from '../core/tokenizer';
 import { MergeRange } from '../core/model';
 
 const DEFAULT_COL_WIDTH = 110;
 const DEFAULT_ROW_HEIGHT = 28;
 const HEADER_ROW_HEIGHT = 28;
 const HEADER_COL_WIDTH = 45;
+
+const HIGHLIGHT_COLORS = [
+  '#2563eb', // Blue
+  '#dc2626', // Red
+  '#16a34a', // Green
+  '#9333ea', // Purple
+  '#ea580c', // Orange
+  '#0891b2', // Cyan
+];
 
 export const Grid: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,6 +33,7 @@ export const Grid: React.FC = () => {
     editingValue,
     rowCount,
     colCount,
+    cutRange,
     setActiveCell,
     setSelection,
     startEditing,
@@ -29,15 +41,42 @@ export const Grid: React.FC = () => {
     commitEditing,
     cancelEditing,
     clearSelectionContent,
+    copySelection,
+    cutSelection,
+    paste,
+    insertRowAt,
+    deleteRowAt,
+    insertColAt,
+    deleteColAt,
+    setColWidth,
+    setRowHeight,
+    freezeTo,
+    applyFillRange,
+    fillDownAction,
+    fillRightAction,
+    cycleCurrentReference,
     undo,
     redo,
+    mergeCells,
+    unmergeCells,
     getDisplayValue,
     getRawValue,
     getComputedValue,
   } = useSheetStore();
 
   const sheet = workbook.sheets[activeSheetIndex];
+
+  // Mouse states
   const [isMouseDown, setIsMouseDown] = useState(false);
+  const [isFillDragging, setIsFillDragging] = useState(false);
+  const [fillTarget, setFillTarget] = useState<SelectionState | null>(null);
+
+  // Resize states
+  const [resizingCol, setResizingCol] = useState<{ colIdx: number; startX: number; startW: number } | null>(null);
+  const [resizingRow, setResizingRow] = useState<{ rowIdx: number; startY: number; startH: number } | null>(null);
+
+  // Context Menu state
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   // Precompute merge maps
   const { anchorMap, coveredMap } = useMemo(() => {
@@ -58,6 +97,38 @@ export const Grid: React.FC = () => {
     return { anchorMap: anchors, coveredMap: covered };
   }, [sheet.merges]);
 
+  // Formula Reference Highlights (colored borders for referenced cells)
+  const refHighlights = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (!isEditing || !editingValue.startsWith('=')) return map;
+
+    try {
+      const tokens = tokenize(editingValue);
+      let colorIdx = 0;
+
+      for (const t of tokens) {
+        if (t.type === 'CELL_REF') {
+          const color = HIGHLIGHT_COLORS[colorIdx % HIGHLIGHT_COLORS.length];
+          map[t.value.toUpperCase()] = color;
+          colorIdx++;
+        } else if (t.type === 'RANGE') {
+          const rng = parseRange(t.value);
+          if (rng) {
+            const color = HIGHLIGHT_COLORS[colorIdx % HIGHLIGHT_COLORS.length];
+            for (let r = rng.r1; r <= rng.r2; r++) {
+              for (let c = rng.c1; c <= rng.c2; c++) {
+                map[cellToA1(r, c)] = color;
+              }
+            }
+            colorIdx++;
+          }
+        }
+      }
+    } catch {}
+
+    return map;
+  }, [isEditing, editingValue]);
+
   // Focus input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -65,9 +136,24 @@ export const Grid: React.FC = () => {
     }
   }, [isEditing]);
 
-  // Handle global keyboard shortcuts in grid
+  // Check if cursor in editing formula is ready for Point Mode reference insertion
+  const isPointModeReady = useCallback(() => {
+    if (!isEditing || !editingValue.startsWith('=')) return false;
+    const trimmed = editingValue.trimEnd();
+    const lastChar = trimmed[trimmed.length - 1];
+    return '=+-*/^%&,(<>'.includes(lastChar);
+  }, [isEditing, editingValue]);
+
+  // Global keyboard shortcuts in grid
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // F4 key works both inside editor and grid
+      if (e.key === 'F4') {
+        e.preventDefault();
+        cycleCurrentReference();
+        return;
+      }
+
       if (isEditing) return;
 
       const isCtrl = e.ctrlKey || e.metaKey;
@@ -82,6 +168,36 @@ export const Grid: React.FC = () => {
       if (isCtrl && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        copySelection();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        cutSelection();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        paste(e.shiftKey);
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        fillDownAction();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        fillRightAction();
         return;
       }
 
@@ -110,7 +226,6 @@ export const Grid: React.FC = () => {
         e.preventDefault();
         clearSelectionContent();
       } else if (e.key.length === 1 && !isCtrl && !e.altKey) {
-        // Typing printable character replaces cell content
         e.preventDefault();
         startEditing(e.key);
       }
@@ -124,12 +239,28 @@ export const Grid: React.FC = () => {
     setActiveCell,
     startEditing,
     clearSelectionContent,
+    copySelection,
+    cutSelection,
+    paste,
+    fillDownAction,
+    fillRightAction,
+    cycleCurrentReference,
     undo,
     redo,
   ]);
 
+  // Point mode cell click / regular selection
   const handleCellMouseDown = (r: number, c: number, e: React.MouseEvent) => {
     if (e.button !== 0) return;
+
+    if (isEditing && isPointModeReady()) {
+      // Point mode: insert reference into formula
+      e.preventDefault();
+      const clickedA1 = cellToA1(r, c);
+      setEditingValue(editingValue + clickedA1);
+      return;
+    }
+
     setIsMouseDown(true);
     if (e.shiftKey) {
       setActiveCell(r, c, true);
@@ -139,19 +270,94 @@ export const Grid: React.FC = () => {
   };
 
   const handleCellMouseEnter = (r: number, c: number) => {
+    if (isFillDragging) {
+      // Expand fill preview
+      const r1 = Math.min(selection.r1, r);
+      const c1 = Math.min(selection.c1, c);
+      const r2 = Math.max(selection.r2, r);
+      const c2 = Math.max(selection.c2, c);
+      setFillTarget({ r1, c1, r2, c2 });
+      return;
+    }
+
     if (!isMouseDown) return;
     setSelection(activeCell.r, activeCell.c, r, c);
   };
 
-  const handleMouseUp = () => {
-    setIsMouseDown(false);
+  // Fill handle mouse interactions
+  const handleFillHandleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsFillDragging(true);
+    setFillTarget({ ...selection });
   };
 
-  useEffect(() => {
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
-  }, []);
+  const handleFillHandleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Auto-fill down until last non-empty row of adjacent column
+    const adjCol = selection.c1 > 0 ? selection.c1 - 1 : selection.c2 + 1;
+    let lastRow = selection.r2;
 
+    for (let r = selection.r2 + 1; r < rowCount; r++) {
+      const adjKey = cellToA1(r, adjCol);
+      if (sheet.cells[adjKey] && sheet.cells[adjKey].raw) {
+        lastRow = r;
+      } else {
+        break;
+      }
+    }
+
+    if (lastRow > selection.r2) {
+      applyFillRange({
+        r1: selection.r1,
+        c1: selection.c1,
+        r2: lastRow,
+        c2: selection.c2,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (isFillDragging && fillTarget) {
+      applyFillRange(fillTarget);
+      setIsFillDragging(false);
+      setFillTarget(null);
+    }
+    setIsMouseDown(false);
+    setResizingCol(null);
+    setResizingRow(null);
+  };
+
+  // Resize mouse move listener
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (resizingCol) {
+        const delta = e.clientX - resizingCol.startX;
+        setColWidth(resizingCol.colIdx, resizingCol.startW + delta);
+      } else if (resizingRow) {
+        const delta = e.clientY - resizingRow.startY;
+        setRowHeight(resizingRow.rowIdx, resizingRow.startH + delta);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingCol, resizingRow, isFillDragging, fillTarget, setColWidth, setRowHeight]);
+
+  // Context Menu trigger
+  const handleCellContextMenu = (r: number, c: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (r < selection.r1 || r > selection.r2 || c < selection.c1 || c > selection.c2) {
+      setActiveCell(r, c, false);
+    }
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+  };
+
+  // Header clicks
   const handleColHeaderClick = (colIdx: number) => {
     setActiveCell(0, colIdx, false);
     setSelection(0, colIdx, rowCount - 1, colIdx);
@@ -165,6 +371,16 @@ export const Grid: React.FC = () => {
   const handleCornerClick = () => {
     setActiveCell(0, 0, false);
     setSelection(0, 0, rowCount - 1, colCount - 1);
+  };
+
+  // Auto-fit column width on double-click
+  const handleColResizeDoubleClick = (colIdx: number) => {
+    let maxLen = 4;
+    for (let r = 0; r < rowCount; r++) {
+      const val = getDisplayValue(r, colIdx);
+      if (val) maxLen = Math.max(maxLen, val.length);
+    }
+    setColWidth(colIdx, Math.min(400, Math.max(60, maxLen * 11 + 24)));
   };
 
   // Calculate cell position for inline editor overlay
@@ -194,6 +410,31 @@ export const Grid: React.FC = () => {
     };
   }, [isEditing, activeCell, sheet.colWidths, sheet.rowHeights]);
 
+  // Position of fill handle at bottom-right corner of selection
+  const fillHandleStyle = useMemo(() => {
+    let left = HEADER_COL_WIDTH;
+    for (let c = 0; c <= selection.c2; c++) {
+      left += sheet.colWidths[c] || DEFAULT_COL_WIDTH;
+    }
+
+    let top = HEADER_ROW_HEIGHT;
+    for (let r = 0; r <= selection.r2; r++) {
+      top += sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
+    }
+
+    return {
+      position: 'absolute' as const,
+      left: `${left - 4}px`,
+      top: `${top - 4}px`,
+      width: '7px',
+      height: '7px',
+      backgroundColor: 'var(--color-primary)',
+      border: '1px solid #ffffff',
+      cursor: 'crosshair',
+      zIndex: 8,
+    };
+  }, [selection, sheet.colWidths, sheet.rowHeights]);
+
   return (
     <div
       ref={containerRef}
@@ -205,6 +446,16 @@ export const Grid: React.FC = () => {
       }}
     >
       <div style={{ position: 'relative', display: 'inline-block' }}>
+        {/* Fill handle square */}
+        {!isEditing && (
+          <div
+            style={fillHandleStyle}
+            onMouseDown={handleFillHandleMouseDown}
+            onDoubleClick={handleFillHandleDoubleClick}
+            title="ลากเพื่อเติมข้อมูล / ดับเบิลคลิกเพื่อเติมลงล่าง"
+          />
+        )}
+
         {/* In-place editor */}
         {isEditing && (
           <input
@@ -253,7 +504,7 @@ export const Grid: React.FC = () => {
                   position: 'sticky',
                   top: 0,
                   left: 0,
-                  zIndex: 4,
+                  zIndex: 5,
                   width: `${HEADER_COL_WIDTH}px`,
                   minWidth: `${HEADER_COL_WIDTH}px`,
                   height: `${HEADER_ROW_HEIGHT}px`,
@@ -271,6 +522,7 @@ export const Grid: React.FC = () => {
                   c <= selection.c2 &&
                   selection.r1 === 0 &&
                   selection.r2 === rowCount - 1;
+                const isFrozen = c < sheet.frozenCols;
 
                 return (
                   <th
@@ -279,7 +531,7 @@ export const Grid: React.FC = () => {
                     style={{
                       position: 'sticky',
                       top: 0,
-                      zIndex: 3,
+                      zIndex: isFrozen ? 4 : 3,
                       width: `${width}px`,
                       minWidth: `${width}px`,
                       maxWidth: `${width}px`,
@@ -287,12 +539,34 @@ export const Grid: React.FC = () => {
                       backgroundColor: isColSelected ? 'var(--bg-selection)' : 'var(--bg-header)',
                       color: 'var(--fg-muted)',
                       border: '1px solid var(--border-color)',
+                      borderRight: isFrozen && c === sheet.frozenCols - 1 ? '3px solid var(--color-primary)' : '1px solid var(--border-color)',
                       fontWeight: 600,
                       textAlign: 'center',
                       cursor: 'pointer',
                     }}
                   >
                     {colToStr(c)}
+
+                    {/* Column resize drag handle */}
+                    <div
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setResizingCol({ colIdx: c, startX: e.clientX, startW: width });
+                      }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        handleColResizeDoubleClick(c);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        width: '5px',
+                        height: '100%',
+                        cursor: 'col-resize',
+                        zIndex: 10,
+                      }}
+                    />
                   </th>
                 );
               })}
@@ -307,6 +581,7 @@ export const Grid: React.FC = () => {
                 r <= selection.r2 &&
                 selection.c1 === 0 &&
                 selection.c2 === colCount - 1;
+              const isFrozenRow = r < sheet.frozenRows;
 
               return (
                 <tr key={r}>
@@ -316,26 +591,44 @@ export const Grid: React.FC = () => {
                     style={{
                       position: 'sticky',
                       left: 0,
-                      zIndex: 2,
+                      zIndex: isFrozenRow ? 4 : 2,
                       width: `${HEADER_COL_WIDTH}px`,
                       minWidth: `${HEADER_COL_WIDTH}px`,
                       height: `${height}px`,
                       backgroundColor: isRowSelected ? 'var(--bg-selection)' : 'var(--bg-header)',
                       color: 'var(--fg-muted)',
                       border: '1px solid var(--border-color)',
+                      borderBottom: isFrozenRow && r === sheet.frozenRows - 1 ? '3px solid var(--color-primary)' : '1px solid var(--border-color)',
                       fontWeight: 500,
                       textAlign: 'center',
                       cursor: 'pointer',
                     }}
                   >
                     {r + 1}
+
+                    {/* Row resize drag handle */}
+                    <div
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setResizingRow({ rowIdx: r, startY: e.clientY, startH: height });
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '5px',
+                        cursor: 'row-resize',
+                        zIndex: 10,
+                      }}
+                    />
                   </th>
 
                   {/* Grid cells */}
                   {Array.from({ length: colCount }, (_, c) => {
                     const coordKey = `${r},${c}`;
                     if (coveredMap.has(coordKey)) {
-                      return null; // Covered by merged cell
+                      return null;
                     }
 
                     const a1 = cellToA1(r, c);
@@ -349,6 +642,15 @@ export const Grid: React.FC = () => {
                       c >= selection.c1 &&
                       c <= selection.c2;
                     const isActive = r === activeCell.r && c === activeCell.c;
+                    const isCut =
+                      cutRange !== null &&
+                      r >= cutRange.r1 &&
+                      r <= cutRange.r2 &&
+                      c >= cutRange.c1 &&
+                      c <= cutRange.c2;
+
+                    // Reference color highlight
+                    const highlightColor = refHighlights[a1];
 
                     return (
                       <Cell
@@ -361,6 +663,8 @@ export const Grid: React.FC = () => {
                         computedValue={getComputedValue(r, c)}
                         isSelected={isSelected}
                         isActive={isActive}
+                        isCut={isCut}
+                        highlightColor={highlightColor}
                         style={cellData?.style}
                         rowSpan={merge ? merge.r2 - merge.r1 + 1 : undefined}
                         colSpan={merge ? merge.c2 - merge.c1 + 1 : undefined}
@@ -369,6 +673,7 @@ export const Grid: React.FC = () => {
                         onMouseDown={(e) => handleCellMouseDown(r, c, e)}
                         onMouseEnter={() => handleCellMouseEnter(r, c)}
                         onDoubleClick={() => startEditing()}
+                        onContextMenu={(e) => handleCellContextMenu(r, c, e)}
                       />
                     );
                   })}
@@ -378,6 +683,31 @@ export const Grid: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Context Menu */}
+      {contextMenuPos && (
+        <ContextMenu
+          x={contextMenuPos.x}
+          y={contextMenuPos.y}
+          onClose={() => setContextMenuPos(null)}
+          onCopy={copySelection}
+          onCut={cutSelection}
+          onPaste={() => paste(false)}
+          onPasteValuesOnly={() => paste(true)}
+          onInsertRowAbove={() => insertRowAt(activeCell.r)}
+          onInsertRowBelow={() => insertRowAt(activeCell.r + 1)}
+          onInsertColLeft={() => insertColAt(activeCell.c)}
+          onInsertColRight={() => insertColAt(activeCell.c + 1)}
+          onDeleteRow={() => deleteRowAt(activeCell.r)}
+          onDeleteCol={() => deleteColAt(activeCell.c)}
+          onClearContent={clearSelectionContent}
+          onMerge={mergeCells}
+          onUnmerge={unmergeCells}
+          onFreezeRow={() => freezeTo(activeCell.r + 1, sheet.frozenCols)}
+          onFreezeCol={() => freezeTo(sheet.frozenRows, activeCell.c + 1)}
+          onUnfreeze={() => freezeTo(0, 0)}
+        />
+      )}
     </div>
   );
 };
