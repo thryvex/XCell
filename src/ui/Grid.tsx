@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useSheetStore, SelectionState } from './store';
 import { Cell } from './Cell';
-import { ContextMenu } from './ContextMenu';
+import { ContextMenu, ContextMenuTarget } from './ContextMenu';
 import { colToStr, cellToA1, parseRange } from '../core/address';
 import { tokenize } from '../core/tokenizer';
 import { MergeRange } from '../core/model';
+import { th } from '../i18n/th';
 
 const DEFAULT_COL_WIDTH = 110;
 const DEFAULT_ROW_HEIGHT = 28;
@@ -41,6 +42,7 @@ export const Grid: React.FC = () => {
     commitEditing,
     cancelEditing,
     clearSelectionContent,
+    clearSelectionFormat,
     copySelection,
     cutSelection,
     paste,
@@ -77,7 +79,7 @@ export const Grid: React.FC = () => {
   const [resizingRow, setResizingRow] = useState<{ rowIdx: number; startY: number; startH: number } | null>(null);
 
   // Context Menu state
-  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; targetType: ContextMenuTarget } | null>(null);
 
   // Precompute merge maps
   const { anchorMap, coveredMap } = useMemo(() => {
@@ -349,13 +351,62 @@ export const Grid: React.FC = () => {
     };
   }, [resizingCol, resizingRow, isFillDragging, fillTarget, setColWidth, setRowHeight]);
 
-  // Context Menu trigger
+  // Context Menu triggers
   const handleCellContextMenu = (r: number, c: number, e: React.MouseEvent) => {
     e.preventDefault();
-    if (r < selection.r1 || r > selection.r2 || c < selection.c1 || c > selection.c2) {
-      setActiveCell(r, c, false);
+    e.stopPropagation();
+    if (isEditing) {
+      commitEditing();
     }
-    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    const isInSelection =
+      r >= selection.r1 &&
+      r <= selection.r2 &&
+      c >= selection.c1 &&
+      c <= selection.c2;
+
+    if (!isInSelection) {
+      setActiveCell(r, c, false);
+      setSelection(r, c, r, c);
+    }
+    setContextMenuPos({ x: e.clientX, y: e.clientY, targetType: 'cell' });
+  };
+
+  const handleRowHeaderContextMenu = (rowIdx: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isEditing) {
+      commitEditing();
+    }
+    const isRowSelected =
+      rowIdx >= selection.r1 &&
+      rowIdx <= selection.r2 &&
+      selection.c1 === 0 &&
+      selection.c2 === colCount - 1;
+
+    if (!isRowSelected) {
+      setActiveCell(rowIdx, 0, false);
+      setSelection(rowIdx, 0, rowIdx, colCount - 1);
+    }
+    setContextMenuPos({ x: e.clientX, y: e.clientY, targetType: 'row' });
+  };
+
+  const handleColHeaderContextMenu = (colIdx: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isEditing) {
+      commitEditing();
+    }
+    const isColSelected =
+      colIdx >= selection.c1 &&
+      colIdx <= selection.c2 &&
+      selection.r1 === 0 &&
+      selection.r2 === rowCount - 1;
+
+    if (!isColSelected) {
+      setActiveCell(0, colIdx, false);
+      setSelection(0, colIdx, rowCount - 1, colIdx);
+    }
+    setContextMenuPos({ x: e.clientX, y: e.clientY, targetType: 'col' });
   };
 
   // Header clicks
@@ -529,11 +580,7 @@ export const Grid: React.FC = () => {
                   <th
                     key={c}
                     onClick={() => handleColHeaderClick(c)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      handleColHeaderClick(c);
-                      setContextMenuPos({ x: e.clientX, y: e.clientY });
-                    }}
+                    onContextMenu={(e) => handleColHeaderContextMenu(c, e)}
                     style={{
                       position: 'sticky',
                       top: 0,
@@ -594,11 +641,7 @@ export const Grid: React.FC = () => {
                   {/* Row header (1, 2, 3...) */}
                   <th
                     onClick={() => handleRowHeaderClick(r)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      handleRowHeaderClick(r);
-                      setContextMenuPos({ x: e.clientX, y: e.clientY });
-                    }}
+                    onContextMenu={(e) => handleRowHeaderContextMenu(r, e)}
                     style={{
                       position: 'sticky',
                       left: 0,
@@ -705,7 +748,7 @@ export const Grid: React.FC = () => {
           }}
         >
           <span style={{ fontSize: '13px', color: 'var(--fg-muted)' }}>
-            เพิ่มแถวที่ด้านล่าง:
+            {th.grid.appendRowsLabel}
           </span>
           <button
             onClick={() => addRowsAtBottom(50)}
@@ -720,7 +763,7 @@ export const Grid: React.FC = () => {
               cursor: 'pointer',
             }}
           >
-            ＋ เพิ่ม 50 แถว
+            {th.grid.add50Rows}
           </button>
           <button
             onClick={() => addRowsAtBottom(100)}
@@ -735,10 +778,10 @@ export const Grid: React.FC = () => {
               cursor: 'pointer',
             }}
           >
-            ＋ เพิ่ม 100 แถว
+            {th.grid.add100Rows}
           </button>
           <span style={{ fontSize: '12px', color: 'var(--fg-muted)', marginLeft: '8px' }}>
-            (ปัจจุบันมี {rowCount} แถว)
+            {th.grid.currentRows.replace('{count}', String(rowCount))}
           </span>
         </div>
       </div>
@@ -748,6 +791,7 @@ export const Grid: React.FC = () => {
         <ContextMenu
           x={contextMenuPos.x}
           y={contextMenuPos.y}
+          targetType={contextMenuPos.targetType}
           onClose={() => setContextMenuPos(null)}
           onCopy={copySelection}
           onCut={cutSelection}
@@ -760,6 +804,7 @@ export const Grid: React.FC = () => {
           onDeleteRow={() => deleteRowAt(activeCell.r)}
           onDeleteCol={() => deleteColAt(activeCell.c)}
           onClearContent={clearSelectionContent}
+          onClearFormat={clearSelectionFormat}
           onMerge={mergeCells}
           onUnmerge={unmergeCells}
           onFreezeRow={() => freezeTo(activeCell.r + 1, sheet.frozenCols)}

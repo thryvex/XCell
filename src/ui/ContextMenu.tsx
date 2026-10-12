@@ -1,8 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { th } from '../i18n/th';
+
+export type ContextMenuTarget = 'cell' | 'row' | 'col';
 
 export interface ContextMenuProps {
   x: number;
   y: number;
+  targetType?: ContextMenuTarget;
   onClose: () => void;
   onCopy: () => void;
   onCut: () => void;
@@ -15,6 +19,7 @@ export interface ContextMenuProps {
   onDeleteRow: () => void;
   onDeleteCol: () => void;
   onClearContent: () => void;
+  onClearFormat: () => void;
   onMerge: () => void;
   onUnmerge: () => void;
   onFreezeRow: () => void;
@@ -25,6 +30,7 @@ export interface ContextMenuProps {
 export const ContextMenu: React.FC<ContextMenuProps> = ({
   x,
   y,
+  targetType = 'cell',
   onClose,
   onCopy,
   onCut,
@@ -37,28 +43,76 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onDeleteRow,
   onDeleteCol,
   onClearContent,
+  onClearFormat,
   onMerge,
   onUnmerge,
   onFreezeRow,
   onFreezeCol,
   onUnfreeze,
 }) => {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Position calculation and viewport clamping
+  const [menuRect, setMenuRect] = useState<{ width: number; height: number }>({
+    width: 240,
+    height: targetType === 'cell' ? 480 : 360,
+  });
+
+  useLayoutEffect(() => {
+    if (menuRef.current) {
+      setMenuRect({
+        width: menuRef.current.offsetWidth || 240,
+        height: menuRef.current.offsetHeight || (targetType === 'cell' ? 480 : 360),
+      });
+    }
+  }, [targetType]);
+
+  const margin = 8;
+  const posX = Math.max(margin, Math.min(x, window.innerWidth - menuRect.width - margin));
+  const posY = Math.max(margin, Math.min(y, window.innerHeight - menuRect.height - margin));
+
   useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
+    const handleOutsidePointer = (e: MouseEvent | PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleOutsideContextMenu = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return;
+      }
       onClose();
     };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
 
-    window.addEventListener('click', handleOutsideClick);
-    window.addEventListener('contextmenu', handleOutsideClick);
-    window.addEventListener('keydown', handleKeyDown);
+    // Attach listeners after a short delay (40ms) so the event triggering contextmenu doesn't dismiss it
+    const timer = setTimeout(() => {
+      document.addEventListener('pointerdown', handleOutsidePointer);
+      document.addEventListener('contextmenu', handleOutsideContextMenu);
+      document.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('scroll', handleScroll, true);
+    }, 40);
 
     return () => {
-      window.removeEventListener('click', handleOutsideClick);
-      window.removeEventListener('contextmenu', handleOutsideClick);
-      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('contextmenu', handleOutsideContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScroll, true);
     };
   }, [onClose]);
 
@@ -84,14 +138,34 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     margin: '4px 0',
   };
 
-  // Prevent menu overflow off right or bottom of window
-  const menuWidth = 240;
-  const menuHeight = 440;
-  const posX = Math.min(x, window.innerWidth - menuWidth - 10);
-  const posY = Math.min(y, window.innerHeight - menuHeight - 10);
+  const renderItem = (label: string, shortcut: string | undefined, onClick: () => void, isDanger = false) => (
+    <div
+      style={{
+        ...menuItemStyle,
+        color: isDanger ? 'var(--color-danger)' : undefined,
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+        onClose();
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+    >
+      <span>{label}</span>
+      {shortcut && <span style={shortcutStyle}>{shortcut}</span>}
+    </div>
+  );
 
   return (
     <div
+      ref={menuRef}
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onClick={(e) => e.stopPropagation()}
       style={{
         position: 'fixed',
@@ -102,214 +176,77 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         border: '1px solid var(--border-color)',
         borderRadius: '6px',
         boxShadow: '0 6px 18px rgba(0, 0, 0, 0.15)',
-        width: `${menuWidth}px`,
+        width: '240px',
         padding: '4px 0',
         display: 'flex',
         flexDirection: 'column',
       }}
     >
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onCopy();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>คัดลอก</span>
-        <span style={shortcutStyle}>Ctrl+C</span>
-      </div>
+      {/* 1. Row Header Menu */}
+      {targetType === 'row' && (
+        <>
+          {renderItem(th.contextMenu.insertRowAbove, undefined, onInsertRowAbove)}
+          {renderItem(th.contextMenu.insertRowBelow, undefined, onInsertRowBelow)}
+          {renderItem(th.contextMenu.deleteRow, undefined, onDeleteRow, true)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.clearContent, 'Delete', onClearContent)}
+          {renderItem(th.contextMenu.clearFormat, undefined, onClearFormat)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.copy, 'Ctrl+C', onCopy)}
+          {renderItem(th.contextMenu.cut, 'Ctrl+X', onCut)}
+          {renderItem(th.contextMenu.paste, 'Ctrl+V', onPaste)}
+          {renderItem(th.contextMenu.pasteValuesOnly, 'Ctrl+Shift+V', onPasteValuesOnly)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.freezeRow, undefined, onFreezeRow)}
+          {renderItem(th.contextMenu.unfreeze, undefined, onUnfreeze)}
+        </>
+      )}
 
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onCut();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ตัด</span>
-        <span style={shortcutStyle}>Ctrl+X</span>
-      </div>
+      {/* 2. Column Header Menu */}
+      {targetType === 'col' && (
+        <>
+          {renderItem(th.contextMenu.insertColLeft, undefined, onInsertColLeft)}
+          {renderItem(th.contextMenu.insertColRight, undefined, onInsertColRight)}
+          {renderItem(th.contextMenu.deleteCol, undefined, onDeleteCol, true)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.clearContent, 'Delete', onClearContent)}
+          {renderItem(th.contextMenu.clearFormat, undefined, onClearFormat)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.copy, 'Ctrl+C', onCopy)}
+          {renderItem(th.contextMenu.cut, 'Ctrl+X', onCut)}
+          {renderItem(th.contextMenu.paste, 'Ctrl+V', onPaste)}
+          {renderItem(th.contextMenu.pasteValuesOnly, 'Ctrl+Shift+V', onPasteValuesOnly)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.freezeCol, undefined, onFreezeCol)}
+          {renderItem(th.contextMenu.unfreeze, undefined, onUnfreeze)}
+        </>
+      )}
 
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onPaste();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>วาง</span>
-        <span style={shortcutStyle}>Ctrl+V</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onPasteValuesOnly();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>วางเฉพาะค่า</span>
-        <span style={shortcutStyle}>Ctrl+Shift+V</span>
-      </div>
-
-      <div style={dividerStyle} />
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onInsertRowAbove();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>แทรก 1 แถวด้านบน</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onInsertRowBelow();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>แทรก 1 แถวด้านล่าง</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onInsertColLeft();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>แทรก 1 คอลัมน์ทางซ้าย</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onInsertColRight();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>แทรก 1 คอลัมน์ทางขวา</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onDeleteRow();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ลบแถว</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onDeleteCol();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ลบคอลัมน์</span>
-      </div>
-
-      <div style={dividerStyle} />
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onClearContent();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ล้างเนื้อหา</span>
-        <span style={shortcutStyle}>Delete</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onMerge();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ผสานเซล</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onUnmerge();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>แยกเซล</span>
-      </div>
-
-      <div style={dividerStyle} />
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onFreezeRow();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ตรึงถึงแถวนี้</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onFreezeCol();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ตรึงถึงคอลัมน์นี้</span>
-      </div>
-
-      <div
-        style={menuItemStyle}
-        onClick={() => {
-          onUnfreeze();
-          onClose();
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-selection)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-      >
-        <span>ยกเลิกการตรึง</span>
-      </div>
+      {/* 3. Cell Menu (Full) */}
+      {targetType === 'cell' && (
+        <>
+          {renderItem(th.contextMenu.copy, 'Ctrl+C', onCopy)}
+          {renderItem(th.contextMenu.cut, 'Ctrl+X', onCut)}
+          {renderItem(th.contextMenu.paste, 'Ctrl+V', onPaste)}
+          {renderItem(th.contextMenu.pasteValuesOnly, 'Ctrl+Shift+V', onPasteValuesOnly)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.insertRowAbove, undefined, onInsertRowAbove)}
+          {renderItem(th.contextMenu.insertRowBelow, undefined, onInsertRowBelow)}
+          {renderItem(th.contextMenu.insertColLeft, undefined, onInsertColLeft)}
+          {renderItem(th.contextMenu.insertColRight, undefined, onInsertColRight)}
+          {renderItem(th.contextMenu.deleteRow, undefined, onDeleteRow, true)}
+          {renderItem(th.contextMenu.deleteCol, undefined, onDeleteCol, true)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.clearContent, 'Delete', onClearContent)}
+          {renderItem(th.contextMenu.clearFormat, undefined, onClearFormat)}
+          {renderItem(th.contextMenu.merge, undefined, onMerge)}
+          {renderItem(th.contextMenu.unmerge, undefined, onUnmerge)}
+          <div style={dividerStyle} />
+          {renderItem(th.contextMenu.freezeRow, undefined, onFreezeRow)}
+          {renderItem(th.contextMenu.freezeCol, undefined, onFreezeCol)}
+          {renderItem(th.contextMenu.unfreeze, undefined, onUnfreeze)}
+        </>
+      )}
     </div>
   );
 };

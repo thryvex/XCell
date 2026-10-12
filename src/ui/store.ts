@@ -63,6 +63,7 @@ export interface SheetState {
   commitEditing: (dr?: number, dc?: number) => void;
   cancelEditing: () => void;
   clearSelectionContent: () => void;
+  clearSelectionFormat: () => void;
   setNumFmt: (fmt: NumFmt) => void;
   mergeCells: () => boolean;
   unmergeCells: () => void;
@@ -269,13 +270,18 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     for (let r = selection.r1; r <= selection.r2; r++) {
       for (let c = selection.c1; c <= selection.c2; c++) {
         const key = cellToA1(r, c);
-        if (sheet.cells[key]) {
-          patches.push({
-            key,
-            before: { ...sheet.cells[key] },
-            after: undefined,
-          });
-          delete sheet.cells[key];
+        const cell = sheet.cells[key];
+        if (cell && (cell.raw !== '' || cell.raw !== undefined)) {
+          const before = { ...cell };
+          let after: Cell | undefined;
+          if (cell.style || cell.fmt) {
+            after = { raw: '', fmt: cell.fmt, style: cell.style ? { ...cell.style } : undefined };
+            sheet.cells[key] = after;
+          } else {
+            after = undefined;
+            delete sheet.cells[key];
+          }
+          patches.push({ key, before, after });
           evaluator.invalidate(key);
         }
       }
@@ -284,6 +290,41 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     if (patches.length > 0) {
       history.push({
         description: 'Clear cells',
+        sheetIndex: activeSheetIndex,
+        patch: { cellPatches: patches },
+      });
+      set({ workbook: { ...workbook }, isDirty: true });
+      updateTitle();
+    }
+  },
+
+  clearSelectionFormat: () => {
+    const { selection, workbook, activeSheetIndex, history, updateTitle } = get();
+    const sheet = workbook.sheets[activeSheetIndex];
+    const patches: any[] = [];
+
+    for (let r = selection.r1; r <= selection.r2; r++) {
+      for (let c = selection.c1; c <= selection.c2; c++) {
+        const key = cellToA1(r, c);
+        const cell = sheet.cells[key];
+        if (cell && (cell.style || cell.fmt)) {
+          const before = { ...cell };
+          let after: Cell | undefined;
+          if (cell.raw) {
+            after = { raw: cell.raw };
+            sheet.cells[key] = after;
+          } else {
+            after = undefined;
+            delete sheet.cells[key];
+          }
+          patches.push({ key, before, after });
+        }
+      }
+    }
+
+    if (patches.length > 0) {
+      history.push({
+        description: 'Clear formatting',
         sheetIndex: activeSheetIndex,
         patch: { cellPatches: patches },
       });
@@ -476,18 +517,24 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   undo: () => {
     const { history, workbook, evaluator, updateTitle } = get();
     if (!history.canUndo()) return;
-    history.undo(workbook);
-    evaluator.setSheet(workbook.sheets[get().activeSheetIndex]);
-    set({ workbook: { ...workbook }, isDirty: true });
+    const action = history.undo(workbook);
+    const activeSheet = workbook.sheets[get().activeSheetIndex];
+    evaluator.setSheet(activeSheet);
+    const rowCount = action?.patch.fullSheetBefore?.rowCount ?? get().rowCount;
+    const colCount = action?.patch.fullSheetBefore?.colCount ?? get().colCount;
+    set({ workbook: { ...workbook }, rowCount, colCount, isDirty: true });
     updateTitle();
   },
 
   redo: () => {
     const { history, workbook, evaluator, updateTitle } = get();
     if (!history.canRedo()) return;
-    history.redo(workbook);
-    evaluator.setSheet(workbook.sheets[get().activeSheetIndex]);
-    set({ workbook: { ...workbook }, isDirty: true });
+    const action = history.redo(workbook);
+    const activeSheet = workbook.sheets[get().activeSheetIndex];
+    evaluator.setSheet(activeSheet);
+    const rowCount = action?.patch.fullSheetAfter?.rowCount ?? get().rowCount;
+    const colCount = action?.patch.fullSheetAfter?.colCount ?? get().colCount;
+    set({ workbook: { ...workbook }, rowCount, colCount, isDirty: true });
     updateTitle();
   },
 
@@ -767,56 +814,128 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   insertRowAt: (atRow: number) => {
-    const { workbook, activeSheetIndex, evaluator, history, rowCount, updateTitle } = get();
+    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
     const sheet = workbook.sheets[activeSheetIndex];
+    const fullBefore = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount,
+      colCount,
+    };
     opInsertRow(sheet, atRow, 1);
     evaluator.setSheet(sheet);
+    const newRowCount = rowCount + 1;
+    const fullAfter = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount: newRowCount,
+      colCount,
+    };
+    history.push({
+      description: 'Insert row',
+      sheetIndex: activeSheetIndex,
+      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
+    });
 
     set({
       workbook: { ...workbook },
-      rowCount: rowCount + 1,
+      rowCount: newRowCount,
       isDirty: true,
     });
     updateTitle();
   },
 
   deleteRowAt: (atRow: number) => {
-    const { workbook, activeSheetIndex, evaluator, history, rowCount, updateTitle } = get();
+    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
     const sheet = workbook.sheets[activeSheetIndex];
+    const fullBefore = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount,
+      colCount,
+    };
     opDeleteRow(sheet, atRow, 1);
     evaluator.setSheet(sheet);
+    const newRowCount = Math.max(1, rowCount - 1);
+    const fullAfter = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount: newRowCount,
+      colCount,
+    };
+    history.push({
+      description: 'Delete row',
+      sheetIndex: activeSheetIndex,
+      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
+    });
 
     set({
       workbook: { ...workbook },
-      rowCount: Math.max(1, rowCount - 1),
+      rowCount: newRowCount,
       isDirty: true,
     });
     updateTitle();
   },
 
   insertColAt: (atCol: number) => {
-    const { workbook, activeSheetIndex, evaluator, history, colCount, updateTitle } = get();
+    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
     const sheet = workbook.sheets[activeSheetIndex];
+    const fullBefore = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount,
+      colCount,
+    };
     opInsertCol(sheet, atCol, 1);
     evaluator.setSheet(sheet);
+    const newColCount = colCount + 1;
+    const fullAfter = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount,
+      colCount: newColCount,
+    };
+    history.push({
+      description: 'Insert column',
+      sheetIndex: activeSheetIndex,
+      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
+    });
 
     set({
       workbook: { ...workbook },
-      colCount: colCount + 1,
+      colCount: newColCount,
       isDirty: true,
     });
     updateTitle();
   },
 
   deleteColAt: (atCol: number) => {
-    const { workbook, activeSheetIndex, evaluator, history, colCount, updateTitle } = get();
+    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
     const sheet = workbook.sheets[activeSheetIndex];
+    const fullBefore = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount,
+      colCount,
+    };
     opDeleteCol(sheet, atCol, 1);
     evaluator.setSheet(sheet);
+    const newColCount = Math.max(1, colCount - 1);
+    const fullAfter = {
+      cells: JSON.parse(JSON.stringify(sheet.cells)),
+      merges: JSON.parse(JSON.stringify(sheet.merges)),
+      rowCount,
+      colCount: newColCount,
+    };
+    history.push({
+      description: 'Delete column',
+      sheetIndex: activeSheetIndex,
+      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
+    });
 
     set({
       workbook: { ...workbook },
-      colCount: Math.max(1, colCount - 1),
+      colCount: newColCount,
       isDirty: true,
     });
     updateTitle();

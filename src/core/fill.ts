@@ -1,4 +1,4 @@
-import { Cell, Sheet, RangeCoord } from './model';
+import { Cell, Sheet } from './model';
 import { shiftFormula } from './refshift';
 import { cellToA1 } from './address';
 import { normalizeFloat } from './evaluator';
