@@ -1,0 +1,35 @@
+appId: com.example.sheeteasy
+productName: SheetEasy
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+fileAssociations:
+  - ext: xlsx
+    name: Excel Worksheet
+    description: Microsoft Excel Worksheet
+    role: Editor
+  - ext: csv
+    name: CSV Document
+    description: Comma Separated Values
+    role: Editor
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,40 @@
+{
+  "name": "sheeteasy",
+  "version": "0.1.0",
+  "description": "โปรแกรมตารางคำนวณสำหรับบันทึกรายรับรายจ่ายฉบับง่าย",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:electron": "vite build --config vite.electron.config.ts",
+    "build:renderer": "vite build",
+    "build": "npm run build:electron && npm run build:renderer",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "spreadsheet",
+    "excel",
+    "google-sheets",
+    "electron"
+  ],
+  "author": "SheetEasy Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@fontsource/sarabun": "^5.1.0",
+    "exceljs": "^4.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}
