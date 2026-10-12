@@ -3,6 +3,12 @@ import path from 'path';
 import fs from 'fs';
 import { formatFsError } from '../src/core/fsError';
 import { updateRecentFilesList, removeRecentFileItem } from '../src/core/recentFiles';
+import {
+  parsePreferences,
+  serializePreferences,
+  DEFAULT_PREFERENCES,
+  AppPreferences,
+} from '../src/core/preferences';
 
 let mainWindow: BrowserWindow | null = null;
 let isForcedClose = false;
@@ -114,6 +120,30 @@ function saveRecentFilesSync(list: string[]) {
   } catch {}
 }
 
+// User Preferences Paths & Helpers (Phase 3D)
+function getPreferencesPath(): string {
+  return path.join(app.getPath('userData'), 'preferences.json');
+}
+
+function getPreferencesSync(): AppPreferences {
+  try {
+    const p = getPreferencesPath();
+    if (fs.existsSync(p)) {
+      return parsePreferences(fs.readFileSync(p, 'utf8'));
+    }
+  } catch {}
+  return { ...DEFAULT_PREFERENCES };
+}
+
+function savePreferencesSync(prefs: AppPreferences) {
+  try {
+    const p = getPreferencesPath();
+    const dir = path.dirname(p);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(p, serializePreferences(prefs), 'utf8');
+  } catch {}
+}
+
 // Auto-Recovery Directory & Helpers
 function getRecoveryDir(): string {
   const dir = path.join(app.getPath('userData'), 'recovery');
@@ -122,6 +152,16 @@ function getRecoveryDir(): string {
   }
   return dir;
 }
+
+// Preferences IPC Handlers
+ipcMain.handle('prefs:get', async () => {
+  return getPreferencesSync();
+});
+
+ipcMain.handle('prefs:set', async (_event, prefs: AppPreferences) => {
+  savePreferencesSync(prefs);
+  return { success: true };
+});
 
 // IPC Handlers - File Dialogs
 ipcMain.handle('dialog:openFile', async () => {

@@ -28,6 +28,9 @@ export interface ElectronAPI {
   forceClose: () => void;
   onOpenExternalFile: (callback: (filePath: string) => void) => () => void;
   onRequestClose: (callback: () => void) => () => void;
+  // Preferences
+  getPreferences: () => Promise<any>;
+  setPreferences: (prefs: any) => Promise<void>;
 }
 
 const electronAPI: ElectronAPI = {
@@ -55,6 +58,8 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('app:requestClose', handler);
     return () => ipcRenderer.removeListener('app:requestClose', handler);
   },
+  getPreferences: () => ipcRenderer.invoke('prefs:get'),
+  setPreferences: (prefs) => ipcRenderer.invoke('prefs:set', prefs),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

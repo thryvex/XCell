@@ -9,9 +9,13 @@ import {
   RecoveryDialog,
   UnsupportedOverwriteDialog,
 } from './Dialogs';
+import { TemplateModal } from './TemplateModal';
+import { WelcomeGuideModal } from './WelcomeGuideModal';
+import { HelpModal } from './HelpModal';
 import { FormulaHelper } from './FormulaHelper';
 import { useSheetStore } from './store';
 import { th } from '../i18n/th';
+import { createLedgerWorkbook, createInventoryWorkbook } from '../templates';
 
 export const App: React.FC = () => {
   const {
@@ -25,7 +29,7 @@ export const App: React.FC = () => {
     pendingDelete,
     confirmPendingDelete,
     cancelPendingDelete,
-    // Phase 3C
+    // Phase 3C & 3D
     recentFiles,
     fetchRecentFiles,
     removeRecentFile,
@@ -36,6 +40,7 @@ export const App: React.FC = () => {
     hasWarnedUnsupportedOverwrite,
     setHasWarnedUnsupportedOverwrite,
     dismissUnsupportedBanner,
+    loadTemplate,
   } = useSheetStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -50,6 +55,12 @@ export const App: React.FC = () => {
 
   const [unsupportedOverwriteOpen, setUnsupportedOverwriteOpen] = useState(false);
 
+  // Phase 3D Modal states
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [welcomeGuideModalOpen, setWelcomeGuideModalOpen] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const openedGuideFromHelp = useRef(false);
+
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -57,25 +68,92 @@ export const App: React.FC = () => {
     }, 3500);
   }, []);
 
+  // Check whether to show Welcome Guide or Template Modal on startup
+  const checkWelcomeOrTemplate = useCallback(async () => {
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    let showWelcome = true;
+    if (electronAPI?.getPreferences) {
+      try {
+        const prefs = await electronAPI.getPreferences();
+        if (prefs && typeof prefs.showWelcomeGuide === 'boolean') {
+          showWelcome = prefs.showWelcomeGuide;
+        }
+      } catch {}
+    } else {
+      try {
+        const stored = localStorage.getItem('sheeteasy_show_welcome');
+        if (stored !== null) {
+          showWelcome = stored === 'true';
+        }
+      } catch {}
+    }
+
+    if (showWelcome) {
+      openedGuideFromHelp.current = false;
+      setWelcomeGuideModalOpen(true);
+    } else {
+      setTemplateModalOpen(true);
+    }
+  }, []);
+
+  const savePreferences = async (newPrefs: { showWelcomeGuide: boolean }) => {
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.setPreferences) {
+      try {
+        await electronAPI.setPreferences(newPrefs);
+      } catch {}
+    } else {
+      try {
+        localStorage.setItem('sheeteasy_show_welcome', String(newPrefs.showWelcomeGuide));
+      } catch {}
+    }
+  };
+
+  const handleWelcomeFinish = async (_dontShowAgain: boolean) => {
+    setWelcomeGuideModalOpen(false);
+    await savePreferences({ showWelcomeGuide: false });
+    if (!openedGuideFromHelp.current) {
+      setTemplateModalOpen(true);
+    }
+    openedGuideFromHelp.current = false;
+  };
+
+  const handleWelcomeSkip = async (dontShowAgain: boolean) => {
+    setWelcomeGuideModalOpen(false);
+    if (dontShowAgain) {
+      await savePreferences({ showWelcomeGuide: false });
+    }
+    if (!openedGuideFromHelp.current) {
+      setTemplateModalOpen(true);
+    }
+    openedGuideFromHelp.current = false;
+  };
+
   // Fetch recent files and check for recovery files on mount
   useEffect(() => {
     fetchRecentFiles();
 
-    const checkRecovery = async () => {
-      const electronAPI = (window as any).electronAPI;
+    const checkStartup = async () => {
+      const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+      let hasRecovery = false;
       if (electronAPI?.getRecoveryList) {
         try {
           const list = await electronAPI.getRecoveryList();
           if (Array.isArray(list) && list.length > 0) {
             setRecoveryList(list);
             setRecoveryDialogOpen(true);
+            hasRecovery = true;
           }
         } catch {}
       }
+
+      if (!hasRecovery) {
+        await checkWelcomeOrTemplate();
+      }
     };
 
-    checkRecovery();
-  }, [fetchRecentFiles]);
+    checkStartup();
+  }, [fetchRecentFiles, checkWelcomeOrTemplate]);
 
   // Periodic auto-recovery snapshot every 30 seconds (SPEC 6.3)
   useEffect(() => {
@@ -226,11 +304,38 @@ export const App: React.FC = () => {
     setPendingAction(null);
   };
 
-  // New Workbook
+  // New Workbook (Phase 3D: opens Template Selection modal)
   const handleNew = () => {
     requestActionWithGuard(() => {
-      newWorkbook();
+      setTemplateModalOpen(true);
     });
+  };
+
+  const handleSelectBlank = () => {
+    newWorkbook();
+    setTemplateModalOpen(false);
+  };
+
+  const handleSelectLedger = () => {
+    const wb = createLedgerWorkbook();
+    loadTemplate(wb, 'ตารางรายรับรายจ่าย');
+    setTemplateModalOpen(false);
+  };
+
+  const handleSelectInventory = () => {
+    const wb = createInventoryWorkbook();
+    loadTemplate(wb, 'ตารางรายการสินค้า');
+    setTemplateModalOpen(false);
+  };
+
+  const handleSelectRecent = (targetPath: string) => {
+    setTemplateModalOpen(false);
+    handleOpenRecent(targetPath);
+  };
+
+  const handleCloseTemplateModal = () => {
+    newWorkbook();
+    setTemplateModalOpen(false);
   };
 
   // Open File
@@ -446,6 +551,7 @@ export const App: React.FC = () => {
         onOpenRecent={handleOpenRecent}
         onSave={handleSave}
         onSaveAs={handleSaveAs}
+        onOpenHelp={() => setHelpModalOpen(true)}
       />
 
       <FormulaBar />
@@ -550,12 +656,13 @@ export const App: React.FC = () => {
           showToast(th.messages.recoveryRestored);
         }}
         onDiscard={async () => {
-          const electronAPI = (window as any).electronAPI;
+          const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
           if (electronAPI?.clearAllRecovery) {
             await electronAPI.clearAllRecovery();
           }
           setRecoveryDialogOpen(false);
           showToast(th.messages.recoveryDiscarded);
+          await checkWelcomeOrTemplate();
         }}
       />
 
@@ -599,6 +706,34 @@ export const App: React.FC = () => {
 
       {/* Formula Helper Dialog */}
       <FormulaHelper />
+
+      {/* Template Selection Modal (Phase 3D) */}
+      <TemplateModal
+        isOpen={templateModalOpen}
+        onSelectBlank={handleSelectBlank}
+        onSelectLedger={handleSelectLedger}
+        onSelectInventory={handleSelectInventory}
+        onSelectRecent={handleSelectRecent}
+        onClose={handleCloseTemplateModal}
+        recentFiles={recentFiles}
+      />
+
+      {/* Welcome Guide Modal (Phase 3D) */}
+      <WelcomeGuideModal
+        isOpen={welcomeGuideModalOpen}
+        onFinish={handleWelcomeFinish}
+        onSkip={handleWelcomeSkip}
+      />
+
+      {/* Help Modal (Phase 3D) */}
+      <HelpModal
+        isOpen={helpModalOpen}
+        onClose={() => setHelpModalOpen(false)}
+        onOpenWelcomeGuide={() => {
+          openedGuideFromHelp.current = true;
+          setWelcomeGuideModalOpen(true);
+        }}
+      />
     </div>
   );
 };

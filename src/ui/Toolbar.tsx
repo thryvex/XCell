@@ -9,6 +9,7 @@ interface ToolbarProps {
   onOpenRecent: (path: string) => void;
   onSave: () => void;
   onSaveAs: () => void;
+  onOpenHelp: () => void;
 }
 
 const PRESET_COLORS = [
@@ -18,7 +19,7 @@ const PRESET_COLORS = [
   '#bbf7d0', '#bfdbfe',
 ];
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, onSave, onSaveAs }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, onSave, onSaveAs, onOpenHelp }) => {
   const {
     undo,
     redo,
@@ -725,6 +726,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
             </button>
           </div>
         )}
+      </div>
+
+      {/* Help Button */}
+      <div style={{ marginLeft: 'auto' }}>
+        <button onClick={onOpenHelp} title={th.toolbar.helpTooltip}>
+          ❓ {th.toolbar.help}
+        </button>
       </div>
     </div>
   );

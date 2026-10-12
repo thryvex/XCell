@@ -138,6 +138,7 @@ export interface SheetState {
   hasWarnedUnsupportedOverwrite: boolean;
   setHasWarnedUnsupportedOverwrite: (warned: boolean) => void;
   dismissUnsupportedBanner: () => void;
+  loadTemplate: (wb: Workbook, templateName: string) => void;
 }
 
 const initialWb = createEmptyWorkbook();
@@ -851,6 +852,32 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   dismissUnsupportedBanner: () => {
     set({ unsupportedFeatures: [] });
+  },
+
+  loadTemplate: (wb: Workbook, templateName: string) => {
+    get().clearRecoverySnapshot();
+    const evalInstance = new Evaluator(wb.sheets[0]);
+    const histInstance = new HistoryManager(100);
+
+    set({
+      workbook: wb,
+      activeSheetIndex: 0,
+      activeCell: { r: 1, c: 0 },
+      selection: { r1: 1, c1: 0, r2: 1, c2: 0 },
+      isEditing: false,
+      editingValue: '',
+      filePath: null,
+      fileName: templateName,
+      isDirty: false,
+      evaluator: evalInstance,
+      history: histInstance,
+      clipboard: null,
+      cutRange: null,
+      recoverySessionId: `recovery-${Date.now()}`,
+      unsupportedFeatures: [],
+      hasWarnedUnsupportedOverwrite: false,
+    });
+    get().updateTitle();
   },
 
   getRawValue: (r: number, c: number) => {
