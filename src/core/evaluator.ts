@@ -298,20 +298,20 @@ export class Evaluator {
       return cell.cachedValue;
     }
 
-    const raw = cell.raw.trim();
-
     // Plain text escaping with leading single quote: 'hello
-    if (raw.startsWith("'")) {
-      const val = raw.slice(1);
+    if (cell.raw.startsWith("'")) {
+      const val = cell.raw.slice(1);
       this.cache[key] = val;
       return val;
     }
 
+    const trimmed = cell.raw.trim();
+
     // Formulas start with '='
-    if (raw.startsWith('=')) {
+    if (trimmed.startsWith('=')) {
       this.calculating.add(key);
       try {
-        const val = this.evaluateFormula(raw);
+        const val = this.evaluateFormula(trimmed);
         this.cache[key] = val;
         return val;
       } catch (err: any) {
@@ -324,15 +324,15 @@ export class Evaluator {
     }
 
     // Number or plain string
-    const cleaned = raw.replace(/,/g, '');
+    const cleaned = trimmed.replace(/,/g, '');
     if (cleaned !== '' && !isNaN(Number(cleaned))) {
       const num = Number(cleaned);
       this.cache[key] = num;
       return num;
     }
 
-    this.cache[key] = raw;
-    return raw;
+    this.cache[key] = cell.raw;
+    return cell.raw;
   }
 
   public evaluateFormula(formulaText: string): CellValue {
@@ -360,7 +360,7 @@ export class Evaluator {
 
       case 'CellRef': {
         const val = this.getCellValue(node.a1);
-        return val === '' ? 0 : val;
+        return val;
       }
 
       case 'Range': {

@@ -123,6 +123,8 @@ export const th = {
     categoryMath: 'คณิตศาสตร์',
     categoryStat: 'สถิติ',
     categoryLogic: 'ตรรกศาสตร์',
+    categoryDate: 'วันที่และเวลา',
+    categoryText: 'ข้อความ',
   },
   statusBar: {
     ready: 'พร้อมใช้งาน',

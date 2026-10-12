@@ -129,14 +129,14 @@ type Workbook = { sheets: Sheet[]; activeSheet: number };
 - ขึ้นต้นด้วย `=`
 - ตัวดำเนินการ: `+ - * / ^ %` (เปอร์เซ็นต์ต่อท้ายเลข เช่น `10%`) และ `&` (ต่อข้อความ), เปรียบเทียบ `= <> < > <= >=`
 - วงเล็บ, ข้อความใน `"..."`, ค่าบูลีน `TRUE/FALSE`
-- Reference: `A1`, `$A$1`, `A$1`, `$A1`, ช่วง `A1:C5`, ทั้งคอลัมน์ `A:A` (Phase 2+), อ้างข้ามชีต `'ชื่อชีต'!A1` (Phase 5)
+- Reference: `A1`, `$A$1`, `A$1`, `$A1`, ช่วง `A1:C5`, ทั้งคอลัมน์ `A:A` (Phase 2+), อ้างข้ามชีต `'ชื่อชีต'!A1` (Phase 4B)
 - ตัวพิมพ์เล็ก/ใหญ่ไม่สนใจ (`=sum(a1:a3)` ใช้ได้)
 - ห้ามใช้ `eval`/`new Function` ให้เขียน tokenizer + parser (precedence: `%` > `^` > `* /` > `+ -` > `&` > เปรียบเทียบ)
 
 ### 4.2 ฟังก์ชัน
 **Core (Phase 1):** `SUM, AVERAGE, MEDIAN, MIN, MAX, COUNT, COUNTA, PRODUCT, ROUND, ROUNDUP, ROUNDDOWN, ABS, INT, SQRT, POWER, MOD, IF, IFERROR, AND, OR, NOT`
 **alias:** `MEAN` = `AVERAGE` (ตอนส่งออก .xlsx ต้องเขียนเป็น `AVERAGE` เพราะ Google Sheets ไม่มี `MEAN`)
-**Phase 4:** `SUMIF, COUNTIF, AVERAGEIF, SUMIFS, COUNTIFS, TODAY, NOW, YEAR, MONTH, DAY, TEXT (เฉพาะ format พื้นฐาน), CONCAT, LEN`
+**Phase 4:** `SUMIF, COUNTIF, AVERAGEIF, SUMIFS, COUNTIFS, TODAY, NOW, YEAR, MONTH, DAY, DATE, TEXT (เฉพาะ format พื้นฐาน), CONCAT, LEN`
 ไม่ทำฟังก์ชันขั้นสูง (VLOOKUP, ARRAYFORMULA, QUERY ฯลฯ) นอกสเปกนี้
 
 พฤติกรรมต้องตรง Google Sheets: `SUM/AVERAGE/...` ข้ามข้อความและเซลว่างในช่วง, `AVERAGE` ของช่วงที่ไม่มีตัวเลขเลย → `#DIV/0!`, `MEDIAN` ของจำนวนคู่เฉลี่ยสองค่ากลาง
@@ -463,3 +463,6 @@ jobs:
    - บันทึกไฟล์ใช้ File Dialog + `fs.writeFile`
    - ไฟล์กู้คืน 30 วินาที ไว้ Phase 3
    - การเขียนไฟล์แบบกันไฟล์เสีย (เขียนไฟล์ชั่วคราวแล้ว rename) ถ้าทำได้ในไม่กี่บรรทัดให้ทำก่อนใน Phase 1-2 ได้ ถ้าไม่ได้ไว้ Phase 3
+5. **การปรับขอบเขต Phase 4 (ข้อตกลงก้อน 4A):**
+   - ย้ายการอ้างข้ามชีต `'ชื่อชีต'!A1` จากเดิม Phase 5 มาเป็น Phase 4 (ทำในก้อน 4B ร่วมกับระบบหลายชีต)
+   - เพิ่มฟังก์ชัน `DATE(ปี,เดือน,วัน)` ในรายการฟังก์ชันของ Phase 4 (ก้อน 4A) เพื่อทำงานร่วมกับฟังก์ชันวันที่และเงื่อนไข (criteria)

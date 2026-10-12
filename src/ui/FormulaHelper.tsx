@@ -5,7 +5,7 @@ import { useSheetStore } from './store';
 export interface FunctionItem {
   name: string;
   thaiName: string;
-  category: 'math' | 'stat' | 'logic';
+  category: 'math' | 'stat' | 'logic' | 'date' | 'text';
   description: string;
   syntax: string;
   example: string;
@@ -185,6 +185,124 @@ export const CORE_FUNCTIONS: FunctionItem[] = [
     syntax: 'NOT(เงื่อนไข)',
     example: '=NOT(A1=0)',
   },
+
+  // Phase 4A: Conditional Aggregations
+  {
+    name: 'SUMIF',
+    thaiName: 'รวมตามเงื่อนไข',
+    category: 'math',
+    description: 'หาผลรวมของตัวเลขในช่วงที่ตรงตามเงื่อนไขที่กำหนด',
+    syntax: 'SUMIF(ช่วงเงื่อนไข, เงื่อนไข, [ช่วงรวม])',
+    example: '=SUMIF(A1:A10, ">100", B1:B10)',
+  },
+  {
+    name: 'COUNTIF',
+    thaiName: 'นับตามเงื่อนไข',
+    category: 'stat',
+    description: 'นับจำนวนเซลในช่วงที่ตรงตามเงื่อนไขที่กำหนด',
+    syntax: 'COUNTIF(ช่วงเงื่อนไข, เงื่อนไข)',
+    example: '=COUNTIF(A1:A10, "อาหาร*")',
+  },
+  {
+    name: 'AVERAGEIF',
+    thaiName: 'เฉลี่ยตามเงื่อนไข',
+    category: 'stat',
+    description: 'หาค่าเฉลี่ยของตัวเลขในช่วงที่ตรงตามเงื่อนไข',
+    syntax: 'AVERAGEIF(ช่วงเงื่อนไข, เงื่อนไข, [ช่วงเฉลี่ย])',
+    example: '=AVERAGEIF(A1:A10, "<>0", B1:B10)',
+  },
+  {
+    name: 'SUMIFS',
+    thaiName: 'รวมหลายเงื่อนไข',
+    category: 'math',
+    description: 'หาผลรวมของตัวเลขที่ตรงตามหลายเงื่อนไขพร้อมกัน',
+    syntax: 'SUMIFS(ช่วงรวม, ช่วงเงื่อนไข1, เงื่อนไข1, [ช่วงเงื่อนไข2, เงื่อนไข2, ...])',
+    example: '=SUMIFS(C1:C10, A1:A10, "รายรับ", B1:B10, ">500")',
+  },
+  {
+    name: 'COUNTIFS',
+    thaiName: 'นับหลายเงื่อนไข',
+    category: 'stat',
+    description: 'นับจำนวนแถวที่ตรงตามหลายเงื่อนไขพร้อมกัน',
+    syntax: 'COUNTIFS(ช่วงเงื่อนไข1, เงื่อนไข1, [ช่วงเงื่อนไข2, เงื่อนไข2, ...])',
+    example: '=COUNTIFS(A1:A10, "อาหาร*", B1:B10, ">100")',
+  },
+
+  // Phase 4A: Date & Time functions
+  {
+    name: 'TODAY',
+    thaiName: 'วันที่ปัจจุบัน',
+    category: 'date',
+    description: 'ส่งกลับวันที่ปัจจุบันของระบบ (อัปเดตเมื่อคำนวณใหม่)',
+    syntax: 'TODAY()',
+    example: '=TODAY()',
+  },
+  {
+    name: 'NOW',
+    thaiName: 'วันและเวลาปัจจุบัน',
+    category: 'date',
+    description: 'ส่งกลับวันและเวลาปัจจุบันของระบบ',
+    syntax: 'NOW()',
+    example: '=NOW()',
+  },
+  {
+    name: 'YEAR',
+    thaiName: 'ปี',
+    category: 'date',
+    description: 'ดึงเลขปี (ค.ศ.) ออกจากวันที่',
+    syntax: 'YEAR(วันที่)',
+    example: '=YEAR(A1)',
+  },
+  {
+    name: 'MONTH',
+    thaiName: 'เดือน',
+    category: 'date',
+    description: 'ดึงเลขเดือน (1-12) ออกจากวันที่',
+    syntax: 'MONTH(วันที่)',
+    example: '=MONTH(A1)',
+  },
+  {
+    name: 'DAY',
+    thaiName: 'วัน',
+    category: 'date',
+    description: 'ดึงเลขวันในเดือน (1-31) ออกจากวันที่',
+    syntax: 'DAY(วันที่)',
+    example: '=DAY(A1)',
+  },
+  {
+    name: 'DATE',
+    thaiName: 'สร้างวันที่',
+    category: 'date',
+    description: 'สร้างวันที่จากปี เดือน และวันที่ระบุ (รองรับเดือน/วันล้น)',
+    syntax: 'DATE(ปี, เดือน, วัน)',
+    example: '=DATE(2026, 10, 1)',
+  },
+
+  // Phase 4A: Text functions
+  {
+    name: 'TEXT',
+    thaiName: 'แปลงรูปแบบข้อความ',
+    category: 'text',
+    description: 'แปลงตัวเลขหรือวันที่ให้อยู่ในรูปแบบข้อความที่กำหนด',
+    syntax: 'TEXT(ค่า, รูปแบบ)',
+    example: '=TEXT(A1, "#,##0.00")',
+  },
+  {
+    name: 'CONCAT',
+    thaiName: 'ต่อข้อความ',
+    category: 'text',
+    description: 'รวมข้อความหลายค่าหรือช่วงเซลเข้าด้วยกัน',
+    syntax: 'CONCAT(ข้อความ1, [ข้อความ2, ...])',
+    example: '=CONCAT("สวัสดี", " ", A1)',
+  },
+  {
+    name: 'LEN',
+    thaiName: 'ความยาวข้อความ',
+    category: 'text',
+    description: 'นับจำนวนตัวอักษรในข้อความ',
+    syntax: 'LEN(ข้อความ)',
+    example: '=LEN(A1)',
+  },
 ];
 
 const OPERATORS = ['+', '-', '*', '/', '(', ')', '^', '%'];
@@ -192,7 +310,7 @@ const OPERATORS = ['+', '-', '*', '/', '(', ')', '^', '%'];
 export const FormulaHelper: React.FC = () => {
   const { isFormulaHelperOpen, closeFormulaHelper, insertFormulaFunction } = useSheetStore();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'math' | 'stat' | 'logic'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'math' | 'stat' | 'logic' | 'date' | 'text'>('all');
   const [selectedFnName, setSelectedFnName] = useState<string>('SUM');
 
   const filteredFunctions = useMemo(() => {
@@ -294,6 +412,8 @@ export const FormulaHelper: React.FC = () => {
               { id: 'math', label: th.formulaHelper.categoryMath },
               { id: 'stat', label: th.formulaHelper.categoryStat },
               { id: 'logic', label: th.formulaHelper.categoryLogic },
+              { id: 'date', label: th.formulaHelper.categoryDate },
+              { id: 'text', label: th.formulaHelper.categoryText },
             ].map((cat) => (
               <button
                 key={cat.id}

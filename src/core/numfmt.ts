@@ -26,28 +26,40 @@ export function parseDateString(str: string): number | null {
 
   // Match: D/M or DD/MM or D/M/YYYY or DD-MM-YYYY
   const m = /^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$/.exec(trimmed);
-  if (!m) return null;
+  if (m) {
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    let year = m[3] ? parseInt(m[3], 10) : new Date().getFullYear();
 
-  const day = parseInt(m[1], 10);
-  const month = parseInt(m[2], 10);
-  let year = m[3] ? parseInt(m[3], 10) : new Date().getFullYear();
+    // Handle 2-digit year (e.g. 26 -> 2026)
+    if (year < 100) {
+      year += 2000;
+    }
 
-  // Handle 2-digit year (e.g. 26 -> 2026)
-  if (year < 100) {
-    year += 2000;
+    // Validate range
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const date = new Date(year, month - 1, day);
+      if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+        return dateToSerial(date);
+      }
+    }
   }
 
-  // Validate range
-  if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return null;
+  // Match: YYYY-MM-DD or YYYY/MM/DD
+  const isoMatch = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(trimmed);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const d = parseInt(isoMatch[3], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const date = new Date(y, m - 1, d);
+      if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
+        return dateToSerial(date);
+      }
+    }
   }
 
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-    return null;
-  }
-
-  return dateToSerial(date);
+  return null;
 }
 
 export function formatDate(serial: number): string {

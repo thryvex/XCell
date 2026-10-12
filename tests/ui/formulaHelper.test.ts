@@ -32,12 +32,27 @@ describe('Phase 3B: Formula Helper & Delete Reference Warning', () => {
         'AND',
         'OR',
         'NOT',
+        // Phase 4A functions
+        'SUMIF',
+        'COUNTIF',
+        'AVERAGEIF',
+        'SUMIFS',
+        'COUNTIFS',
+        'TODAY',
+        'NOW',
+        'YEAR',
+        'MONTH',
+        'DAY',
+        'DATE',
+        'TEXT',
+        'CONCAT',
+        'LEN',
       ];
 
       for (const expected of expectedCore) {
         expect(names).toContain(expected);
       }
-      expect(CORE_FUNCTIONS.length).toBe(21);
+      expect(CORE_FUNCTIONS.length).toBe(35);
     });
 
     it('each function provides Thai name, syntax, description, and Thai example', () => {

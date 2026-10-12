@@ -1,6 +1,7 @@
 import { tokenize } from './tokenizer';
 import { FormulaParser } from './evaluator';
 import { parseA1, parseRange } from './address';
+import { FUNCTIONS } from './functions';
 
 const FUNCTION_ALIASES: Record<string, string> = {
   รวม: 'SUM',
@@ -17,6 +18,14 @@ const FUNCTION_ALIASES: Record<string, string> = {
   max: 'MAX',
   นับ: 'COUNT',
   count: 'COUNT',
+  รวมถ้า: 'SUMIF',
+  sumif: 'SUMIF',
+  นับถ้า: 'COUNTIF',
+  countif: 'COUNTIF',
+  เฉลี่ยถ้า: 'AVERAGEIF',
+  averageif: 'AVERAGEIF',
+  sumifs: 'SUMIFS',
+  countifs: 'COUNTIFS',
 };
 
 /**
@@ -33,10 +42,24 @@ export function convertShorthand(input: string): string | null {
     return null;
   }
 
-  // 1. Function shorthand: e.g. "sum a1:a10", "รวม a1:a10", "avg a1,b1,c1"
-  const fnMatch = /^(รวม|sum|เฉลี่ย|avg|mean|average|มัธยฐาน|median|ต่ำสุด|min|สูงสุด|max|นับ|count)\s+([A-Za-z0-9_$,:\s]+)$/i.exec(
-    trimmed
-  );
+  // 1. Function call without '=' e.g. "sumif(a1:a10, \">10\")", "today()"
+  const callMatch = /^([A-Za-zก-๙_]+)\s*\((.*)\)$/.exec(trimmed);
+  if (callMatch) {
+    const fnWord = callMatch[1].toLowerCase();
+    const fnName =
+      FUNCTION_ALIASES[fnWord] ||
+      FUNCTION_ALIASES[callMatch[1]] ||
+      (FUNCTIONS[callMatch[1].toUpperCase()] ? callMatch[1].toUpperCase() : null);
+    if (fnName) {
+      return `=${fnName}(${callMatch[2]})`;
+    }
+  }
+
+  // 2. Function shorthand without parens: e.g. "sum a1:a10", "รวม a1:a10", "avg a1,b1,c1", "รวมถ้า a1:a10, b1"
+  const fnMatch =
+    /^(รวมถ้า|นับถ้า|เฉลี่ยถ้า|sumif|countif|averageif|sumifs|countifs|รวม|sum|เฉลี่ย|avg|mean|average|มัธยฐาน|median|ต่ำสุด|min|สูงสุด|max|นับ|count)\s+([A-Za-z0-9_$,:\s]+)$/i.exec(
+      trimmed
+    );
   if (fnMatch) {
     const fnWord = fnMatch[1].toLowerCase();
     const fnName = FUNCTION_ALIASES[fnWord] || FUNCTION_ALIASES[fnMatch[1]];

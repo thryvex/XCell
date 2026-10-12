@@ -62,7 +62,7 @@ describe('src/core/xlsx Durability & Unsupported Features (SPEC 6.4)', () => {
     // Unsupported functions
     expect(hasUnsupportedFunction('=VLOOKUP(A1, B1:C10, 2, FALSE)')).toBe(true);
     expect(hasUnsupportedFunction('=XLOOKUP(A1, B1:B10, C1:C10)')).toBe(true);
-    expect(hasUnsupportedFunction('=SUMIFS(D1:D10, A1:A10, ">0")')).toBe(true);
+    expect(hasUnsupportedFunction('=QUERY(A1:B10, "select A")')).toBe(true);
     expect(hasUnsupportedFunction('=INDEX(A1:B10, 2, 2)')).toBe(true);
   });
 
