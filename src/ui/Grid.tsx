@@ -43,6 +43,8 @@ export const Grid: React.FC = () => {
     cancelEditing,
     clearSelectionContent,
     clearSelectionFormat,
+    insertCurrentDate,
+    selectAll,
     copySelection,
     cutSelection,
     paste,
@@ -229,6 +231,18 @@ export const Grid: React.FC = () => {
         return;
       }
 
+      if (isCtrl && (e.key === ';' || e.code === 'Semicolon')) {
+        e.preventDefault();
+        insertCurrentDate();
+        return;
+      }
+
+      if (isCtrl && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selectAll();
+        return;
+      }
+
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         setActiveCell(activeCell.r - 1, activeCell.c, e.shiftKey);
@@ -267,6 +281,8 @@ export const Grid: React.FC = () => {
     setActiveCell,
     startEditing,
     clearSelectionContent,
+    insertCurrentDate,
+    selectAll,
     copySelection,
     cutSelection,
     paste,
@@ -275,6 +291,9 @@ export const Grid: React.FC = () => {
     cycleCurrentReference,
     undo,
     redo,
+    toggleBold,
+    toggleItalic,
+    toggleUnderline,
   ]);
 
   // Point mode cell click / regular selection
@@ -570,6 +589,31 @@ export const Grid: React.FC = () => {
             value={editingValue}
             onChange={(e) => setEditingValue(e.target.value)}
             onKeyDown={(e) => {
+              const isCtrl = e.ctrlKey || e.metaKey;
+              if (isCtrl && (e.key === ';' || e.code === 'Semicolon')) {
+                e.preventDefault();
+                const now = new Date();
+                const day = String(now.getDate()).padStart(2, '0');
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const year = now.getFullYear();
+                const dateStr = `${day}/${month}/${year}`;
+
+                const input = inputRef.current;
+                if (input) {
+                  const start = input.selectionStart || 0;
+                  const end = input.selectionEnd || 0;
+                  const val = input.value;
+                  const nextVal = val.slice(0, start) + dateStr + val.slice(end);
+                  setEditingValue(nextVal);
+                  setTimeout(() => {
+                    input.selectionStart = input.selectionEnd = start + dateStr.length;
+                  }, 0);
+                } else {
+                  setEditingValue(editingValue + dateStr);
+                }
+                return;
+              }
+
               if (e.key === 'Enter') {
                 e.preventDefault();
                 commitEditing(e.shiftKey ? -1 : 1, 0);

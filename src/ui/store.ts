@@ -72,6 +72,8 @@ export interface SheetState {
   cancelEditing: () => void;
   clearSelectionContent: () => void;
   clearSelectionFormat: () => void;
+  insertCurrentDate: () => void;
+  selectAll: () => void;
   setNumFmt: (fmt: NumFmt) => void;
   mergeCells: () => boolean;
   unmergeCells: () => void;
@@ -388,6 +390,54 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       set({ workbook: { ...workbook }, isDirty: true });
       updateTitle();
     }
+  },
+
+  insertCurrentDate: () => {
+    const { selection, workbook, activeSheetIndex, evaluator, history, updateTitle, isEditing, editingValue, setEditingValue } = get();
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    const dateStr = `${day}/${month}/${year}`;
+
+    if (isEditing) {
+      setEditingValue(editingValue + dateStr);
+      return;
+    }
+
+    const sheet = workbook.sheets[activeSheetIndex];
+    const patches: any[] = [];
+
+    for (let r = selection.r1; r <= selection.r2; r++) {
+      for (let c = selection.c1; c <= selection.c2; c++) {
+        const key = cellToA1(r, c);
+        const cell = sheet.cells[key];
+        const before = cell ? { ...cell } : undefined;
+        const after: Cell = {
+          raw: dateStr,
+          fmt: 'date',
+          style: cell?.style ? { ...cell.style } : undefined,
+        };
+        sheet.cells[key] = after;
+        patches.push({ key, before, after });
+        evaluator.invalidate(key);
+      }
+    }
+
+    if (patches.length > 0) {
+      history.push({
+        description: 'Insert current date',
+        sheetIndex: activeSheetIndex,
+        patch: { cellPatches: patches },
+      });
+      set({ workbook: { ...workbook }, isDirty: true });
+      updateTitle();
+    }
+  },
+
+  selectAll: () => {
+    const { rowCount, colCount } = get();
+    get().setSelection(0, 0, rowCount - 1, colCount - 1);
   },
 
   setNumFmt: (fmt: NumFmt) => {

@@ -29,6 +29,31 @@ export const FormulaBar: React.FC = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const isCtrl = e.ctrlKey || e.metaKey;
+    if (isCtrl && (e.key === ';' || e.code === 'Semicolon')) {
+      e.preventDefault();
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+
+      const input = e.currentTarget;
+      const start = input.selectionStart || 0;
+      const end = input.selectionEnd || 0;
+      const val = input.value;
+      const nextVal = val.slice(0, start) + dateStr + val.slice(end);
+      if (!isEditing) {
+        startEditing(nextVal);
+      } else {
+        setEditingValue(nextVal);
+      }
+      setTimeout(() => {
+        input.selectionStart = input.selectionEnd = start + dateStr.length;
+      }, 0);
+      return;
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault();
       commitEditing(1, 0);
