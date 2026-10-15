@@ -18,6 +18,7 @@ import { HelpModal } from './HelpModal';
 import { FormulaHelper } from './FormulaHelper';
 import { useSheetStore, isCsvPath } from './store';
 import { CsvImportDialog } from './CsvImportDialog';
+import { PrintDialog } from './PrintDialog';
 import { th } from '../i18n/th';
 import { createLedgerWorkbook, createInventoryWorkbook } from '../templates';
 
@@ -146,6 +147,7 @@ export const App: React.FC = () => {
 
   // ส่งออก CSV (ชีตที่เปิดอยู่, ค่าที่แสดง)
   const [csvFilterConfirmOpen, setCsvFilterConfirmOpen] = useState(false);
+  const [printDialog, setPrintDialog] = useState<'print' | 'pdf' | null>(null);
   const runCsvExport = async () => {
     try {
       const { bytes, defaultName } = getCsvExport();
@@ -653,6 +655,9 @@ export const App: React.FC = () => {
       } else if (isCtrl && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         handleOpen();
+      } else if (isCtrl && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setPrintDialog('print');
       } else if (isCtrl && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         handleNew();
@@ -711,6 +716,8 @@ export const App: React.FC = () => {
         onOpenHelp={() => setHelpModalOpen(true)}
         onExportCsv={handleExportCsv}
         onImportCsv={handleImportCsvAsSheet}
+        onPrint={() => setPrintDialog('print')}
+        onExportPdf={() => setPrintDialog('pdf')}
       />
 
       <FormulaBar />
@@ -951,6 +958,14 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* พิมพ์ / PDF (5B) */}
+      <PrintDialog
+        isOpen={printDialog !== null}
+        focus={printDialog ?? 'print'}
+        onClose={() => setPrintDialog(null)}
+        onToast={showToast}
+      />
 
       {/* นำเข้า CSV (4D) */}
       <CsvImportDialog />

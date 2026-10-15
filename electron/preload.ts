@@ -14,6 +14,8 @@ export interface ElectronAPI {
   exportCsvDialog: (defaultPath?: string) => Promise<{ canceled: boolean; filePath?: string } | null>;
   openCsvFile: () => Promise<{ canceled: boolean; filePath?: string; data?: number[]; error?: string } | null>;
   getInitialFile: () => Promise<string | null>;
+  printDocument: (req: { html: string; pageWidthMm: number; pageHeightMm: number }) => Promise<{ success: boolean; canceled?: boolean; error?: string }>;
+  printToPdf: (req: { html: string; pageWidthMm: number; pageHeightMm: number; defaultPath: string }) => Promise<{ success: boolean; canceled?: boolean; error?: string; filePath?: string }>;
   writeFile: (filePath: string, buffer: number[]) => Promise<{ success: boolean; error?: string }>;
   readFile: (filePath: string) => Promise<{ success: boolean; data?: number[]; error?: string }>;
   setTitle: (title: string) => void;
@@ -42,6 +44,8 @@ const electronAPI: ElectronAPI = {
   exportCsvDialog: (defaultPath) => ipcRenderer.invoke('dialog:exportCsv', defaultPath),
   openCsvFile: () => ipcRenderer.invoke('dialog:openCsv'),
   getInitialFile: () => ipcRenderer.invoke('app:getInitialFile'),
+  printDocument: (req) => ipcRenderer.invoke('print:print', req),
+  printToPdf: (req) => ipcRenderer.invoke('print:pdf', req),
   writeFile: (filePath, buffer) => ipcRenderer.invoke('fs:writeFile', filePath, buffer),
   readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
   setTitle: (title) => ipcRenderer.send('window:setTitle', title),

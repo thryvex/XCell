@@ -11,6 +11,8 @@ interface ToolbarProps {
   onSaveAs: () => void;
   onExportCsv: () => void;
   onImportCsv: () => void;
+  onPrint: () => void;
+  onExportPdf: () => void;
   onOpenHelp: () => void;
 }
 
@@ -30,6 +32,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onOpenHelp,
   onExportCsv,
   onImportCsv,
+  onPrint,
+  onExportPdf,
 }) => {
   const {
     undo,
@@ -247,6 +251,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </button>
         {fileMenuOpen && (
           <div style={dropdownStyle}>
+            <button style={dropdownItemStyle} onClick={() => { setFileMenuOpen(false); onPrint(); }}>
+              {th.print.menuPrint}
+            </button>
+            <button style={dropdownItemStyle} onClick={() => { setFileMenuOpen(false); onExportPdf(); }}>
+              {th.print.menuPdf}
+            </button>
+            <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
             <button style={dropdownItemStyle} onClick={() => { setFileMenuOpen(false); onExportCsv(); }}>
               {th.csv.exportCsv}
             </button>

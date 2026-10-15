@@ -1,5 +1,19 @@
 import ExcelJS from 'exceljs';
-import { Workbook, Sheet, Cell, CellStyle, NumFmt, MergeRange, createEmptySheet, CellValue } from './model';
+import {
+  Workbook,
+  Sheet,
+  Cell,
+  CellStyle,
+  NumFmt,
+  MergeRange,
+  createEmptySheet,
+  CellValue,
+  PrintSettings,
+  PaperSize,
+  PrintMargins,
+  DEFAULT_PRINT_SETTINGS,
+} from './model';
+import { MARGINS_MM } from './paginate';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseA1 } from './address';
 import { dateToSerial, THAI_TO_ERROR_MAP } from './numfmt';
@@ -174,6 +188,11 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
           };
         }
       }
+    }
+
+    // ตัวเลือกพิมพ์ (5B): เก็บใน pageSetup ของแต่ละชีต (ไม่เก็บ "ช่วงที่เลือก")
+    if (wbModel.printSettings) {
+      writePageSetup(ws, wbModel.printSettings, sheetModel.frozenRows);
     }
 
     // ตัวกรอง: เขียนช่วง autoFilter และสถานะแถวที่ซ่อนตามจริง (เงื่อนไขกรองไม่ถูกเขียน)
@@ -450,6 +469,7 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
     sheets: sheets.length > 0 ? sheets : [createEmptySheet('Sheet1')],
     activeSheet,
     unsupportedFeatures: unsupportedFeatures.length > 0 ? unsupportedFeatures : undefined,
+    printSettings: readPrintSettings(excelWorkbook.worksheets[activeSheet], sheets[activeSheet]),
   };
 }
 
@@ -501,4 +521,76 @@ function parseAutoFilterRange(
     r2: Math.max(from.r, to.r),
     c2: Math.max(from.c, to.c),
   };
+}
+
+// ---------------------------------------------------------------------------
+// ตัวเลือกพิมพ์ ↔ ExcelJS pageSetup (5B)
+// ---------------------------------------------------------------------------
+
+const PAPER_CODES: Record<PaperSize, number> = { Letter: 1, A4: 9, A5: 11 };
+const MM_PER_INCH = 25.4;
+
+function writePageSetup(ws: ExcelJS.Worksheet, ps: PrintSettings, frozenRows: number) {
+  const m = MARGINS_MM[ps.margins];
+  ws.pageSetup.orientation = ps.orientation;
+  ws.pageSetup.paperSize = PAPER_CODES[ps.paper] as ExcelJS.PaperSize;
+  if (ps.scaleMode === 'fitWidth') {
+    ws.pageSetup.fitToPage = true;
+    ws.pageSetup.fitToWidth = 1;
+    ws.pageSetup.fitToHeight = 0;
+  } else {
+    ws.pageSetup.fitToPage = false;
+    ws.pageSetup.scale = ps.scaleMode === 'custom' ? Math.round(ps.scalePercent) : 100;
+  }
+  ws.pageSetup.margins = {
+    top: m.top / MM_PER_INCH,
+    bottom: m.bottom / MM_PER_INCH,
+    left: m.left / MM_PER_INCH,
+    right: m.right / MM_PER_INCH,
+    header: 0.3,
+    footer: 0.3,
+  };
+  ws.pageSetup.showGridLines = ps.gridlines;
+  if (ps.repeatFrozen && frozenRows > 0) {
+    ws.pageSetup.printTitlesRow = `1:${frozenRows}`;
+  }
+}
+
+function nearestMargins(left: number | undefined, top: number | undefined): PrintMargins {
+  if (typeof left !== 'number' || typeof top !== 'number') return 'normal';
+  const leftMm = left * MM_PER_INCH;
+  const topMm = top * MM_PER_INCH;
+  let best: PrintMargins = 'normal';
+  let bestDiff = Infinity;
+  for (const key of Object.keys(MARGINS_MM) as PrintMargins[]) {
+    const diff = Math.abs(MARGINS_MM[key].left - leftMm) + Math.abs(MARGINS_MM[key].top - topMm);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = key;
+    }
+  }
+  return best;
+}
+
+/** อ่านตัวเลือกพิมพ์จาก pageSetup ของชีตที่เปิดอยู่ (เท่าที่ .xlsx เก็บได้) */
+function readPrintSettings(ws: ExcelJS.Worksheet | undefined, sheet: Sheet | undefined): PrintSettings {
+  const ps: PrintSettings = { ...DEFAULT_PRINT_SETTINGS };
+  if (!ws) return ps;
+  const setup = ws.pageSetup ?? {};
+  const paper = (Object.keys(PAPER_CODES) as PaperSize[]).find((k) => PAPER_CODES[k] === setup.paperSize);
+  if (paper) ps.paper = paper;
+  if (setup.orientation === 'landscape') ps.orientation = 'landscape';
+  if (setup.fitToPage && setup.fitToWidth === 1) {
+    ps.scaleMode = 'fitWidth';
+  } else if (typeof setup.scale === 'number' && setup.scale !== 100) {
+    ps.scaleMode = 'custom';
+    ps.scalePercent = Math.max(30, Math.min(200, setup.scale));
+  } else {
+    ps.scaleMode = '100';
+  }
+  ps.margins = nearestMargins(setup.margins?.left, setup.margins?.top);
+  ps.gridlines = setup.showGridLines === true;
+  // มีแถวตรึงแต่ไฟล์ไม่ได้ตั้งแถวพิมพ์ซ้ำ → ไม่พิมพ์ซ้ำ
+  ps.repeatFrozen = Boolean(setup.printTitlesRow) || !((sheet?.frozenRows ?? 0) > 0);
+  return ps;
 }

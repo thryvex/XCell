@@ -283,16 +283,15 @@ ipcMain.handle('dialog:openCsv', async () => {
 });
 
 // Atomic File Writing with Specific Thai Error Mapping (SPEC 6.2)
-ipcMain.handle('fs:writeFile', async (_event, filePath: string, bufferData: number[]) => {
+/** เขียนไฟล์แบบ atomic: เขียนไฟล์ชั่วคราวในโฟลเดอร์เดียวกันแล้ว rename ทับ (ไฟล์เดิมไม่เสียถ้าล้มเหลว) */
+function writeFileAtomic(filePath: string, buffer: Buffer): { success: true } | { success: false; error: string } {
   const dir = path.dirname(filePath);
   const tempPath = path.join(dir, `.${path.basename(filePath)}.tmp-${Date.now()}`);
   try {
-    const buffer = Buffer.from(bufferData);
     // Write temporary file in the same directory first
     fs.writeFileSync(tempPath, buffer);
     // Rename atomically over target file
     fs.renameSync(tempPath, filePath);
-
     return { success: true };
   } catch (err: any) {
     // Clean up temporary file if write or rename failed, leaving original file completely intact
@@ -302,6 +301,105 @@ ipcMain.handle('fs:writeFile', async (_event, filePath: string, bufferData: numb
       }
     } catch {}
     return { success: false, error: formatFsError(err) };
+  }
+}
+
+ipcMain.handle('fs:writeFile', async (_event, filePath: string, bufferData: number[]) => {
+  return writeFileAtomic(filePath, Buffer.from(bufferData));
+});
+
+// ---------------------------------------------------------------------------
+// พิมพ์ / PDF (5B)
+// ---------------------------------------------------------------------------
+
+interface PrintRequest {
+  html: string; // เอกสารที่สร้างจากโมเดลข้อมูล (ข้อความทุกเซล escape แล้ว, มี CSP)
+  pageWidthMm: number; // ขนาดหน้าตามแนวที่เลือก (ตรงกับ CSS @page)
+  pageHeightMm: number;
+}
+
+/**
+ * โหลดเอกสารพิมพ์ในหน้าต่างซ่อนที่ปลอดภัย: ไม่มี nodeIntegration, มี contextIsolation + sandbox,
+ * ปิด JavaScript และไม่มี preload; เอกสารเองมี CSP ห้ามโหลดทรัพยากรภายนอก
+ */
+async function loadPrintWindow(html: string): Promise<BrowserWindow> {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      javascript: false,
+      webSecurity: true,
+    },
+  });
+  // ห้ามเปิดหน้าต่าง/นำทางไปที่อื่นจากเอกสารพิมพ์
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  await win.loadURL(`data:text/html;charset=utf-8;base64,${Buffer.from(html, 'utf8').toString('base64')}`);
+  // รอให้ฟอนต์ฝัง (data URL) ถอดรหัสและจัดหน้าเสร็จ
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  return win;
+}
+
+ipcMain.handle('print:print', async (_event, req: PrintRequest) => {
+  let win: BrowserWindow | null = null;
+  try {
+    win = await loadPrintWindow(req.html);
+    const landscape = req.pageWidthMm > req.pageHeightMm;
+    const result = await new Promise<{ success: boolean; reason?: string }>((resolve) => {
+      win!.webContents.print(
+        {
+          silent: false, // กล่องพิมพ์ของระบบ (เลือกเครื่องพิมพ์/จำนวนสำเนา)
+          printBackground: true,
+          margins: { marginType: 'none' },
+          landscape,
+          // ขนาดกระดาษเป็นไมครอน ส่งแบบแนวตั้งแล้วบอกแนวด้วย landscape
+          pageSize: {
+            width: Math.round(Math.min(req.pageWidthMm, req.pageHeightMm) * 1000),
+            height: Math.round(Math.max(req.pageWidthMm, req.pageHeightMm) * 1000),
+          },
+        },
+        (success, failureReason) => resolve({ success, reason: failureReason })
+      );
+    });
+    if (result.success) return { success: true };
+    // ผู้ใช้กดยกเลิกในกล่องพิมพ์ ไม่นับเป็นข้อผิดพลาด
+    if (result.reason === 'cancelled') return { success: false, canceled: true };
+    return { success: false, error: result.reason || 'unknown' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  } finally {
+    win?.destroy();
+  }
+});
+
+ipcMain.handle('print:pdf', async (_event, req: PrintRequest & { defaultPath: string }) => {
+  if (!mainWindow) return { success: false, error: 'no window' };
+  const dlg = await dialog.showSaveDialog(mainWindow, {
+    title: 'บันทึกเป็น PDF',
+    defaultPath: req.defaultPath,
+    filters: [{ name: 'PDF (*.pdf)', extensions: ['pdf'] }],
+  });
+  if (dlg.canceled || !dlg.filePath) return { success: false, canceled: true };
+
+  let win: BrowserWindow | null = null;
+  try {
+    win = await loadPrintWindow(req.html);
+    // preferCSSPageSize: ให้ CSS @page (ขนาด/แนว, ขอบ 0) คุมหน้ากระดาษ เหมือนตัวอย่างก่อนพิมพ์
+    // ฟอนต์ที่ใช้ (Sarabun) ถูกฝังใน PDF โดย Chromium
+    const pdf = await win.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      margins: { marginType: 'none' },
+      displayHeaderFooter: false,
+    });
+    const written = writeFileAtomic(dlg.filePath, Buffer.from(pdf));
+    return written.success ? { success: true, filePath: dlg.filePath } : written;
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  } finally {
+    win?.destroy();
   }
 });
 

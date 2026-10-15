@@ -83,6 +83,39 @@ export type Workbook = {
   sheets: Sheet[];
   activeSheet: number;
   unsupportedFeatures?: string[];
+  printSettings?: PrintSettings; // ตัวเลือกพิมพ์ล่าสุดของไฟล์ (5B)
+};
+
+export type PaperSize = 'A4' | 'Letter' | 'A5';
+export type PrintMargins = 'normal' | 'narrow' | 'wide';
+
+/** ตัวเลือกพิมพ์ (จำต่อไฟล์) */
+export type PrintSettings = {
+  what: 'sheet' | 'all' | 'selection';
+  paper: PaperSize;
+  orientation: 'portrait' | 'landscape';
+  scaleMode: '100' | 'fitWidth' | 'custom';
+  scalePercent: number; // ใช้เมื่อ scaleMode = custom (30–200)
+  margins: PrintMargins;
+  gridlines: boolean;
+  fills: boolean;
+  repeatFrozen: boolean;
+  pageNumbers: boolean;
+  header: boolean; // ชื่อไฟล์ + วันที่พิมพ์ที่หัวกระดาษ
+};
+
+export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
+  what: 'sheet',
+  paper: 'A4',
+  orientation: 'portrait',
+  scaleMode: 'fitWidth',
+  scalePercent: 100,
+  margins: 'normal',
+  gridlines: false,
+  fills: true,
+  repeatFrozen: true,
+  pageNumbers: true,
+  header: false,
 };
 
 export type CellError = '#DIV/0!' | '#VALUE!' | '#REF!' | '#NAME?' | '#CYCLE!' | '#ERR';

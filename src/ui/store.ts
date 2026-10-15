@@ -10,6 +10,8 @@ import {
   CellValue,
   ensureSheetIds,
   ColumnFilter,
+  PrintSettings,
+  DEFAULT_PRINT_SETTINGS,
 } from '../core/model';
 import { Evaluator } from '../core/evaluator';
 import {
@@ -285,6 +287,9 @@ export interface SheetState {
   // Phase 5A: รูปแบบปีที่แสดง (ค่าของแอป เก็บใน userData)
   yearMode: YearMode;
   setYearMode: (mode: YearMode, persist?: boolean) => void;
+
+  // Phase 5B: ตัวเลือกพิมพ์ (จำต่อไฟล์ เก็บใน workbook จึงอยู่ในไฟล์กู้คืนด้วย)
+  setPrintSettings: (patch: Partial<PrintSettings>) => void;
 }
 
 export interface PendingCsvImport {
@@ -1917,6 +1922,13 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   cancelCsvImport: () => set({ pendingCsvImport: null }),
 
   // --- Phase 5A: ปี พ.ศ. ---
+
+  setPrintSettings: (patch) => {
+    const { workbook } = get();
+    // ค่าการพิมพ์เป็นค่าของไฟล์ แต่ไม่ทำให้ขึ้น "ยังไม่ได้บันทึก" (เหมือนระดับซูม)
+    const next = { ...workbook, printSettings: { ...DEFAULT_PRINT_SETTINGS, ...workbook.printSettings, ...patch } };
+    set({ workbook: next });
+  },
 
   setYearMode: (mode: YearMode, persist = true) => {
     setDisplayYearMode(mode);
