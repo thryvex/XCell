@@ -36,7 +36,9 @@ export type MergeRange = {
 }; // 0-based: r1, c1 (top-left) to r2, c2 (bottom-right)
 
 export type Sheet = {
+  id?: string; // รหัสภายในแอป (ไม่บันทึกลง .xlsx) ใช้ผูกสถานะการมองเห็นต่อชีต
   name: string;
+  hidden?: 'hidden' | 'veryHidden'; // ชีตซ่อนจากไฟล์ .xlsx: ไม่แสดงแท็บ แต่เก็บข้อมูลไว้ตามเดิม
   cells: Record<string, Cell>; // key = "B3"
   merges: MergeRange[];
   colWidths: Record<number, number>; // 0-based col index -> width in px
@@ -55,8 +57,26 @@ export type CellError = '#DIV/0!' | '#VALUE!' | '#REF!' | '#NAME?' | '#CYCLE!' |
 
 export type CellValue = string | number | boolean | CellError;
 
+let sheetIdCounter = 0;
+
+export function newSheetId(): string {
+  sheetIdCounter++;
+  return `s${Date.now().toString(36)}-${sheetIdCounter}`;
+}
+
+/**
+ * ใส่ id ให้ทุกชีตที่ยังไม่มี (ไฟล์ที่เปิดมา/ไฟล์กู้คืนรุ่นเก่า)
+ */
+export function ensureSheetIds(wb: Workbook): Workbook {
+  for (const sheet of wb.sheets) {
+    if (!sheet.id) sheet.id = newSheetId();
+  }
+  return wb;
+}
+
 export function createEmptySheet(name: string = 'Sheet1', initialRows = 100, initialCols = 26): Sheet {
   return {
+    id: newSheetId(),
     name,
     cells: {},
     merges: [],
@@ -69,7 +89,7 @@ export function createEmptySheet(name: string = 'Sheet1', initialRows = 100, ini
 
 export function createEmptyWorkbook(): Workbook {
   return {
-    sheets: [createEmptySheet('Sheet1')],
+    sheets: [createEmptySheet('ชีต1')],
     activeSheet: 0,
   };
 }

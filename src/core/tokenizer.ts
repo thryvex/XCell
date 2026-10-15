@@ -2,6 +2,7 @@ export type TokenType =
   | 'NUMBER'
   | 'STRING'
   | 'BOOLEAN'
+  | 'ERROR'
   | 'CELL_REF'
   | 'RANGE'
   | 'FUNCTION'
@@ -14,10 +15,11 @@ export type TokenType =
 
 export interface Token {
   type: TokenType;
-  value: string;
+  value: string; // สำหรับ CELL_REF/RANGE คือเฉพาะส่วนที่อยู่ (เช่น "A1:B2") ตัวพิมพ์ใหญ่
   raw: string;
   start: number;
   end: number;
+  sheet?: string; // ชื่อชีต (ถอดเครื่องหมายคำพูดแล้ว) ถ้า reference ระบุชีต เช่น 'ชีต 2'!A1
 }
 
 const CELL_REF_REGEX = /^\$?[A-Za-z]+\$?\d+$/;

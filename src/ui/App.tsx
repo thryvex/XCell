@@ -3,6 +3,7 @@ import { Toolbar } from './Toolbar';
 import { FormulaBar } from './FormulaBar';
 import { Grid } from './Grid';
 import { StatusBar } from './StatusBar';
+import { SheetTabs } from './SheetTabs';
 import {
   ConfirmDialog,
   UnsavedChangesDialog,
@@ -615,6 +616,7 @@ export const App: React.FC = () => {
       )}
 
       <Grid />
+      <SheetTabs />
       <StatusBar />
 
       {/* Toast Notification */}

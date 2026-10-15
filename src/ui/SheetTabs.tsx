@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSheetStore } from './store';
 import { th } from '../i18n/th';
 import { ConfirmDialog } from './Dialogs';
+import { adjacentVisibleSheet, visibleSheetIndices } from '../core/workbookOps';
 
 export const SheetTabs: React.FC = () => {
   const {
@@ -100,6 +101,11 @@ export const SheetTabs: React.FC = () => {
     setDragOverIndex(null);
   };
 
+  // ชีตซ่อนไม่มีแท็บ: เลื่อนซ้าย/ขวาจึงสลับกับแท็บที่มองเห็นข้างเคียง
+  const canDelete = visibleSheetIndices(workbook).length > 1;
+  const menuPrev = contextMenu ? adjacentVisibleSheet(workbook, contextMenu.sheetIndex, -1) : null;
+  const menuNext = contextMenu ? adjacentVisibleSheet(workbook, contextMenu.sheetIndex, 1) : null;
+
   return (
     <div
       style={{
@@ -147,13 +153,14 @@ export const SheetTabs: React.FC = () => {
       {/* Sheet Tabs List */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, overflowX: 'auto' }}>
         {workbook.sheets.map((sheet, idx) => {
+          if (sheet.hidden) return null;
           const isActive = idx === activeSheetIndex;
           const isBeingEdited = idx === editingIndex;
           const isDragOver = idx === dragOverIndex && draggedIndex !== idx;
 
           return (
             <div
-              key={sheet.name + '-' + idx}
+              key={sheet.id ?? idx}
               draggable={!isBeingEdited}
               onDragStart={(e) => handleDragStart(e, idx)}
               onDragOver={(e) => handleDragOver(e, idx)}
@@ -193,7 +200,7 @@ export const SheetTabs: React.FC = () => {
                 position: 'relative',
                 flexShrink: 0,
               }}
-              title={`${sheet.name} (ดับเบิลคลิกเพื่อเปลี่ยนชื่อ, คลิกขวาสำหรับตัวเลือก)`}
+              title={th.sheetTabs.tabTooltip.replace('{name}', sheet.name)}
             >
               {isBeingEdited ? (
                 <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
@@ -296,18 +303,18 @@ export const SheetTabs: React.FC = () => {
           <div style={{ height: '1px', backgroundColor: 'var(--border-color, #e2e8f0)', margin: '4px 0' }} />
           <div
             onClick={() => {
-              if (contextMenu.sheetIndex > 0) {
-                moveSheet(contextMenu.sheetIndex, contextMenu.sheetIndex - 1);
+              if (menuPrev !== null) {
+                moveSheet(contextMenu.sheetIndex, menuPrev);
               }
               setContextMenu(null);
             }}
             style={{
               padding: '6px 12px',
-              cursor: contextMenu.sheetIndex > 0 ? 'pointer' : 'not-allowed',
-              opacity: contextMenu.sheetIndex > 0 ? 1 : 0.5,
+              cursor: menuPrev !== null ? 'pointer' : 'not-allowed',
+              opacity: menuPrev !== null ? 1 : 0.5,
             }}
             onMouseEnter={(e) => {
-              if (contextMenu.sheetIndex > 0) e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)';
+              if (menuPrev !== null) e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)';
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
@@ -315,18 +322,18 @@ export const SheetTabs: React.FC = () => {
           </div>
           <div
             onClick={() => {
-              if (contextMenu.sheetIndex < workbook.sheets.length - 1) {
-                moveSheet(contextMenu.sheetIndex, contextMenu.sheetIndex + 1);
+              if (menuNext !== null) {
+                moveSheet(contextMenu.sheetIndex, menuNext);
               }
               setContextMenu(null);
             }}
             style={{
               padding: '6px 12px',
-              cursor: contextMenu.sheetIndex < workbook.sheets.length - 1 ? 'pointer' : 'not-allowed',
-              opacity: contextMenu.sheetIndex < workbook.sheets.length - 1 ? 1 : 0.5,
+              cursor: menuNext !== null ? 'pointer' : 'not-allowed',
+              opacity: menuNext !== null ? 1 : 0.5,
             }}
             onMouseEnter={(e) => {
-              if (contextMenu.sheetIndex < workbook.sheets.length - 1)
+              if (menuNext !== null)
                 e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)';
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -336,18 +343,18 @@ export const SheetTabs: React.FC = () => {
           <div style={{ height: '1px', backgroundColor: 'var(--border-color, #e2e8f0)', margin: '4px 0' }} />
           <div
             onClick={() => {
-              if (workbook.sheets.length > 1) {
+              if (canDelete) {
                 deleteSheet(contextMenu.sheetIndex);
               }
               setContextMenu(null);
             }}
             style={{
               padding: '6px 12px',
-              color: workbook.sheets.length > 1 ? '#ef4444' : '#94a3b8',
-              cursor: workbook.sheets.length > 1 ? 'pointer' : 'not-allowed',
+              color: canDelete ? '#ef4444' : '#94a3b8',
+              cursor: canDelete ? 'pointer' : 'not-allowed',
             }}
             onMouseEnter={(e) => {
-              if (workbook.sheets.length > 1) e.currentTarget.style.backgroundColor = '#fef2f2';
+              if (canDelete) e.currentTarget.style.backgroundColor = '#fef2f2';
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >

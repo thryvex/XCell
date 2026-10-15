@@ -1,9 +1,14 @@
-import { Workbook, Cell, MergeRange } from './model';
+import { Workbook, Sheet, Cell, MergeRange } from './model';
 
 export interface CellPatch {
   key: string;
   before?: Cell;
   after?: Cell;
+}
+
+/** cell patch ที่ระบุชีต ใช้กับสูตรในชีตอื่นที่ถูกปรับตามการแทรก/ลบแถว-คอลัมน์ */
+export interface SheetCellPatch extends CellPatch {
+  sheetIndex: number;
 }
 
 export interface FullSheetSnapshot {
@@ -32,12 +37,42 @@ export interface WorkbookSnapshot {
 
 export interface HistoryAction {
   description: string;
+  /** ชีตที่ได้รับผลกระทบ (Undo/Redo จะสลับไปชีตนี้) */
   sheetIndex?: number;
   patch?: SheetPatch;
+  /** สูตรในชีตอื่นที่ถูกเขียนใหม่พร้อมกัน */
+  extraCellPatches?: SheetCellPatch[];
+  /** การเปลี่ยนโครงสร้างสมุดงาน (เพิ่ม/ลบ/เปลี่ยนชื่อ/ทำสำเนา/ย้ายชีต) เก็บทั้งชุดชีต */
   workbookBefore?: WorkbookSnapshot;
   workbookAfter?: WorkbookSnapshot;
-  activeSheetBefore?: number;
-  activeSheetAfter?: number;
+}
+
+function cloneSheets(sheets: Sheet[]): Sheet[] {
+  return JSON.parse(JSON.stringify(sheets));
+}
+
+export function snapshotWorkbook(wb: Workbook): WorkbookSnapshot {
+  return { sheets: cloneSheets(wb.sheets), activeSheet: wb.activeSheet };
+}
+
+function applySnapshot(sheet: Sheet, snap: FullSheetSnapshot) {
+  sheet.cells = JSON.parse(JSON.stringify(snap.cells));
+  sheet.merges = JSON.parse(JSON.stringify(snap.merges));
+  if (snap.colWidths) sheet.colWidths = { ...snap.colWidths };
+  if (snap.rowHeights) sheet.rowHeights = { ...snap.rowHeights };
+  if (snap.frozenRows !== undefined) sheet.frozenRows = snap.frozenRows;
+  if (snap.frozenCols !== undefined) sheet.frozenCols = snap.frozenCols;
+}
+
+function applyCellPatches(sheet: Sheet, patches: CellPatch[], direction: 'before' | 'after') {
+  for (const p of patches) {
+    const value = p[direction];
+    if (value) {
+      sheet.cells[p.key] = { ...value };
+    } else {
+      delete sheet.cells[p.key];
+    }
+  }
 }
 
 export class HistoryManager {
@@ -69,44 +104,7 @@ export class HistoryManager {
   public undo(wb: Workbook): HistoryAction | null {
     const action = this.undoStack.pop();
     if (!action) return null;
-
-    if (action.workbookBefore) {
-      wb.sheets = JSON.parse(JSON.stringify(action.workbookBefore.sheets));
-      wb.activeSheet = action.workbookBefore.activeSheet;
-      this.redoStack.push(action);
-      return action;
-    }
-
-    if (action.sheetIndex !== undefined && action.patch) {
-      const sheet = wb.sheets[action.sheetIndex];
-      if (sheet) {
-        if (action.patch.fullSheetBefore) {
-          sheet.cells = JSON.parse(JSON.stringify(action.patch.fullSheetBefore.cells));
-          sheet.merges = JSON.parse(JSON.stringify(action.patch.fullSheetBefore.merges));
-          if (action.patch.fullSheetBefore.colWidths) sheet.colWidths = { ...action.patch.fullSheetBefore.colWidths };
-          if (action.patch.fullSheetBefore.rowHeights) sheet.rowHeights = { ...action.patch.fullSheetBefore.rowHeights };
-          if (action.patch.fullSheetBefore.frozenRows !== undefined) sheet.frozenRows = action.patch.fullSheetBefore.frozenRows;
-          if (action.patch.fullSheetBefore.frozenCols !== undefined) sheet.frozenCols = action.patch.fullSheetBefore.frozenCols;
-        } else {
-          // Revert cell patches
-          if (action.patch.cellPatches) {
-            for (const p of action.patch.cellPatches) {
-              if (p.before) {
-                sheet.cells[p.key] = { ...p.before };
-              } else {
-                delete sheet.cells[p.key];
-              }
-            }
-          }
-
-          // Revert merges
-          if (action.patch.mergesBefore !== undefined) {
-            sheet.merges = [...action.patch.mergesBefore];
-          }
-        }
-      }
-    }
-
+    this.apply(wb, action, 'before');
     this.redoStack.push(action);
     return action;
   }
@@ -114,46 +112,43 @@ export class HistoryManager {
   public redo(wb: Workbook): HistoryAction | null {
     const action = this.redoStack.pop();
     if (!action) return null;
+    this.apply(wb, action, 'after');
+    this.undoStack.push(action);
+    return action;
+  }
 
-    if (action.workbookAfter) {
-      wb.sheets = JSON.parse(JSON.stringify(action.workbookAfter.sheets));
-      wb.activeSheet = action.workbookAfter.activeSheet;
-      this.undoStack.push(action);
-      return action;
+  private apply(wb: Workbook, action: HistoryAction, direction: 'before' | 'after') {
+    const wbSnap = direction === 'before' ? action.workbookBefore : action.workbookAfter;
+    if (wbSnap) {
+      wb.sheets = cloneSheets(wbSnap.sheets);
+      wb.activeSheet = wbSnap.activeSheet;
+      return;
     }
 
     if (action.sheetIndex !== undefined && action.patch) {
       const sheet = wb.sheets[action.sheetIndex];
       if (sheet) {
-        if (action.patch.fullSheetAfter) {
-          sheet.cells = JSON.parse(JSON.stringify(action.patch.fullSheetAfter.cells));
-          sheet.merges = JSON.parse(JSON.stringify(action.patch.fullSheetAfter.merges));
-          if (action.patch.fullSheetAfter.colWidths) sheet.colWidths = { ...action.patch.fullSheetAfter.colWidths };
-          if (action.patch.fullSheetAfter.rowHeights) sheet.rowHeights = { ...action.patch.fullSheetAfter.rowHeights };
-          if (action.patch.fullSheetAfter.frozenRows !== undefined) sheet.frozenRows = action.patch.fullSheetAfter.frozenRows;
-          if (action.patch.fullSheetAfter.frozenCols !== undefined) sheet.frozenCols = action.patch.fullSheetAfter.frozenCols;
+        const full = direction === 'before' ? action.patch.fullSheetBefore : action.patch.fullSheetAfter;
+        if (full) {
+          applySnapshot(sheet, full);
         } else {
-          // Re-apply cell patches
           if (action.patch.cellPatches) {
-            for (const p of action.patch.cellPatches) {
-              if (p.after) {
-                sheet.cells[p.key] = { ...p.after };
-              } else {
-                delete sheet.cells[p.key];
-              }
-            }
+            applyCellPatches(sheet, action.patch.cellPatches, direction);
           }
-
-          // Re-apply merges
-          if (action.patch.mergesAfter !== undefined) {
-            sheet.merges = [...action.patch.mergesAfter];
+          const merges = direction === 'before' ? action.patch.mergesBefore : action.patch.mergesAfter;
+          if (merges !== undefined) {
+            sheet.merges = [...merges];
           }
         }
       }
     }
 
-    this.undoStack.push(action);
-    return action;
+    if (action.extraCellPatches) {
+      for (const p of action.extraCellPatches) {
+        const sheet = wb.sheets[p.sheetIndex];
+        if (sheet) applyCellPatches(sheet, [p], direction);
+      }
+    }
   }
 
   public clear() {

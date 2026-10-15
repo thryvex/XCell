@@ -8,9 +8,22 @@ import {
   MergeRange,
   createEmptyWorkbook,
   CellValue,
+  ensureSheetIds,
 } from '../core/model';
 import { Evaluator } from '../core/evaluator';
-import { HistoryManager, HistoryAction } from '../core/history';
+import { HistoryManager, HistoryAction, snapshotWorkbook, SheetCellPatch } from '../core/history';
+import {
+  addSheet as opAddSheet,
+  duplicateSheet as opDuplicateSheet,
+  renameSheet as opRenameSheet,
+  deleteSheet as opDeleteSheet,
+  moveSheet as opMoveSheet,
+  adjacentVisibleSheet,
+  nearestVisibleSheet,
+  SheetOpResult,
+} from '../core/workbookOps';
+import { countFormulasReferencingSheet } from '../core/sheetName';
+import { th } from '../i18n/th';
 import { convertShorthand } from '../core/shorthand';
 import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/address';
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../core/xlsx';
@@ -42,6 +55,23 @@ export interface InternalClipboard {
   r2: number;
   c2: number;
   isCut?: boolean;
+  sourceSheetId?: string; // ชีตต้นทาง (สำหรับตัดข้ามชีต และวางเฉพาะค่า)
+}
+
+/** สถานะการมองเห็นที่แยกอิสระต่อชีต (ความกว้าง/สูง/การตรึง เก็บอยู่ใน Sheet แล้ว) */
+export interface SheetView {
+  activeCell: { r: number; c: number };
+  selection: SelectionState;
+  rowCount: number;
+  colCount: number;
+  scrollTop: number;
+  scrollLeft: number;
+}
+
+export interface PendingDeleteSheet {
+  sheetIndex: number;
+  sheetName: string;
+  referencingFormulaCount: number;
 }
 
 export interface SheetState {
@@ -141,10 +171,193 @@ export interface SheetState {
   setHasWarnedUnsupportedOverwrite: (warned: boolean) => void;
   dismissUnsupportedBanner: () => void;
   loadTemplate: (wb: Workbook, templateName: string) => void;
+
+  // Phase 4B: หลายชีต
+  sheetViews: Record<string, SheetView>;
+  pendingDeleteSheet: PendingDeleteSheet | null;
+  switchSheet: (index: number) => void;
+  nextSheet: () => void;
+  prevSheet: () => void;
+  addSheet: () => void;
+  duplicateSheet: (index: number) => void;
+  renameSheet: (index: number, newName: string) => { success: boolean; error?: string };
+  deleteSheet: (index: number) => { success: boolean; error?: string };
+  confirmDeleteSheet: () => void;
+  cancelDeleteSheet: () => void;
+  moveSheet: (from: number, to: number) => void;
+  rememberScroll: (scrollTop: number, scrollLeft: number) => void;
+  getActiveSheetView: () => SheetView;
 }
 
-const initialWb = createEmptyWorkbook();
-const initialEvaluator = new Evaluator(initialWb.sheets[0]);
+const DEFAULT_ROW_COUNT = 100;
+const DEFAULT_COL_COUNT = 26;
+
+function defaultSheetView(activeCell = { r: 0, c: 0 }): SheetView {
+  return {
+    activeCell: { ...activeCell },
+    selection: { r1: activeCell.r, c1: activeCell.c, r2: activeCell.r, c2: activeCell.c },
+    rowCount: DEFAULT_ROW_COUNT,
+    colCount: DEFAULT_COL_COUNT,
+    scrollTop: 0,
+    scrollLeft: 0,
+  };
+}
+
+/**
+ * สถานะเริ่มต้นเมื่อโหลดสมุดงานใหม่ (ใหม่ / เปิดไฟล์ / กู้คืน / เทมเพลต)
+ */
+function freshWorkbookState(wb: Workbook, activeCell = { r: 0, c: 0 }) {
+  ensureSheetIds(wb);
+  const activeSheetIndex = nearestVisibleSheet(wb, wb.activeSheet || 0);
+  wb.activeSheet = activeSheetIndex;
+  const view = defaultSheetView(activeCell);
+  return {
+    workbook: wb,
+    activeSheetIndex,
+    activeCell: view.activeCell,
+    selection: view.selection,
+    rowCount: view.rowCount,
+    colCount: view.colCount,
+    sheetViews: { [wb.sheets[activeSheetIndex].id!]: view } as Record<string, SheetView>,
+    isEditing: false,
+    editingValue: '',
+    evaluator: new Evaluator(wb),
+    history: new HistoryManager(100),
+    clipboard: null,
+    cutRange: null,
+    pendingDelete: null,
+    pendingDeleteSheet: null,
+  };
+}
+
+type StoreGet = () => SheetState;
+type StoreSet = (partial: Partial<SheetState>) => void;
+
+/** บันทึกสถานะการมองเห็นของชีตที่เปิดอยู่ลงใน sheetViews (คืนค่า object ใหม่) */
+function captureView(get: StoreGet): Record<string, SheetView> {
+  const s = get();
+  const id = s.workbook.sheets[s.activeSheetIndex]?.id;
+  if (!id) return s.sheetViews;
+  const prev = s.sheetViews[id];
+  return {
+    ...s.sheetViews,
+    [id]: {
+      activeCell: { ...s.activeCell },
+      selection: { ...s.selection },
+      rowCount: s.rowCount,
+      colCount: s.colCount,
+      scrollTop: prev?.scrollTop ?? 0,
+      scrollLeft: prev?.scrollLeft ?? 0,
+    },
+  };
+}
+
+/** สถานะ store ที่ใช้แสดงชีต index (ถ้ายังไม่มีสถานะเดิม จะสร้างค่าเริ่มต้นใน views) */
+function viewStateFor(wb: Workbook, index: number, views: Record<string, SheetView>) {
+  const id = wb.sheets[index]?.id;
+  let view = id ? views[id] : undefined;
+  if (!view) {
+    view = defaultSheetView();
+    if (id) views[id] = view;
+  }
+  return {
+    activeSheetIndex: index,
+    activeCell: { ...view.activeCell },
+    selection: { ...view.selection },
+    rowCount: view.rowCount,
+    colCount: view.colCount,
+  };
+}
+
+/** หลัง Undo/Redo: คำนวณใหม่ทั้งสมุดงาน และสลับไปชีตที่ได้รับผลกระทบ */
+function finishHistoryStep(
+  get: StoreGet,
+  set: StoreSet,
+  views: Record<string, SheetView>,
+  targetIndex: number,
+  full?: { rowCount?: number; colCount?: number }
+) {
+  const { workbook, evaluator, activeSheetIndex, updateTitle } = get();
+  const nextWb = { ...workbook };
+  const index = nearestVisibleSheet(nextWb, targetIndex);
+  nextWb.activeSheet = index;
+  evaluator.setWorkbook(nextWb);
+
+  const viewState =
+    index === activeSheetIndex && nextWb.sheets[index]?.id === workbook.sheets[activeSheetIndex]?.id
+      ? {}
+      : viewStateFor(nextWb, index, views);
+
+  set({
+    workbook: nextWb,
+    ...viewState,
+    activeSheetIndex: index,
+    ...(full?.rowCount !== undefined ? { rowCount: full.rowCount } : {}),
+    ...(full?.colCount !== undefined ? { colCount: full.colCount } : {}),
+    sheetViews: views,
+    isEditing: false,
+    editingValue: '',
+    isDirty: true,
+  });
+  updateTitle();
+}
+
+/**
+ * ทำรายการระดับชีต (เพิ่ม/ลบ/เปลี่ยนชื่อ/ทำสำเนา/ย้าย) พร้อมบันทึกประวัติ Undo/Redo
+ * - affectedBefore: ชีตที่ Undo จะสลับกลับไป
+ * - show: 'result' = แสดงชีตที่ได้จากรายการ, 'keep' = คงชีตที่เปิดอยู่เดิม
+ */
+function runSheetOp(
+  get: StoreGet,
+  set: StoreSet,
+  description: string,
+  mutate: (wb: Workbook) => SheetOpResult,
+  opts: { affectedBefore: number; show: 'result' | 'keep' }
+): SheetOpResult {
+  const { isEditing, commitEditing } = get();
+  if (isEditing) commitEditing(0, 0);
+
+  const { workbook, activeSheetIndex, history, evaluator, updateTitle } = get();
+  const activeId = workbook.sheets[activeSheetIndex]?.id;
+  const views = captureView(get);
+  const before = snapshotWorkbook(workbook);
+  before.activeSheet = opts.affectedBefore;
+
+  const res = mutate(workbook);
+  if (!res.ok) return res;
+
+  const affectedAfter = res.index ?? activeSheetIndex;
+  let showIndex = affectedAfter;
+  if (opts.show === 'keep') {
+    const kept = workbook.sheets.findIndex((s) => s.id === activeId);
+    showIndex = kept >= 0 ? kept : affectedAfter;
+  }
+
+  const after = snapshotWorkbook(workbook);
+  after.activeSheet = affectedAfter;
+  history.push({ description, workbookBefore: before, workbookAfter: after });
+
+  const nextWb = { ...workbook, activeSheet: showIndex };
+  evaluator.setWorkbook(nextWb);
+  set({
+    workbook: nextWb,
+    ...viewStateFor(nextWb, showIndex, views),
+    sheetViews: views,
+    isDirty: true,
+  });
+  updateTitle();
+  return res;
+}
+
+/** จำนวนเซลสูตรในชีตอื่นที่อ้างถึงชีต index */
+function countSheetReferences(wb: Workbook, index: number): number {
+  const target = wb.sheets[index];
+  if (!target) return 0;
+  return countFormulasReferencingSheet(wb.sheets, target.name);
+}
+
+const initialWb = ensureSheetIds(createEmptyWorkbook());
+const initialEvaluator = new Evaluator(initialWb);
 const initialHistory = new HistoryManager(100);
 
 export const useSheetStore = create<SheetState>((set, get) => ({
@@ -169,6 +382,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   recoverySessionId: `recovery-${Date.now()}`,
   unsupportedFeatures: [],
   hasWarnedUnsupportedOverwrite: false,
+  sheetViews: { [initialWb.sheets[0].id!]: defaultSheetView() },
+  pendingDeleteSheet: null,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -278,7 +493,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         };
       }
 
-      evaluator.invalidate(key);
+      evaluator.invalidate(key, activeSheetIndex);
 
       const action: HistoryAction = {
         description: `Edit ${key}`,
@@ -341,7 +556,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
             delete sheet.cells[key];
           }
           patches.push({ key, before, after });
-          evaluator.invalidate(key);
+          evaluator.invalidate(key, activeSheetIndex);
         }
       }
     }
@@ -420,7 +635,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         };
         sheet.cells[key] = after;
         patches.push({ key, before, after });
-        evaluator.invalidate(key);
+        evaluator.invalidate(key, activeSheetIndex);
       }
     }
 
@@ -657,7 +872,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
 
         sheet.cells[key] = { raw: formula };
-        evaluator.invalidate(key);
+        evaluator.invalidate(key, activeSheetIndex);
 
         history.push({
           description: `Auto ${fnName}`,
@@ -691,7 +906,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       });
 
       sheet.cells[formulaKey] = { raw: formula };
-      evaluator.invalidate(formulaKey);
+      evaluator.invalidate(formulaKey, activeSheetIndex);
     }
 
     history.push({
@@ -710,49 +925,36 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   undo: () => {
-    const { history, workbook, evaluator, updateTitle } = get();
+    const { history, workbook } = get();
     if (!history.canUndo()) return;
+    const views = captureView(get);
     const action = history.undo(workbook);
-    const activeSheet = workbook.sheets[get().activeSheetIndex];
-    evaluator.setSheet(activeSheet);
-    const rowCount = action?.patch.fullSheetBefore?.rowCount ?? get().rowCount;
-    const colCount = action?.patch.fullSheetBefore?.colCount ?? get().colCount;
-    set({ workbook: { ...workbook }, rowCount, colCount, isDirty: true });
-    updateTitle();
+    if (!action) return;
+    const target = action.workbookBefore
+      ? action.workbookBefore.activeSheet
+      : action.sheetIndex ?? get().activeSheetIndex;
+    finishHistoryStep(get, set, views, target, action.patch?.fullSheetBefore);
   },
 
   redo: () => {
-    const { history, workbook, evaluator, updateTitle } = get();
+    const { history, workbook } = get();
     if (!history.canRedo()) return;
+    const views = captureView(get);
     const action = history.redo(workbook);
-    const activeSheet = workbook.sheets[get().activeSheetIndex];
-    evaluator.setSheet(activeSheet);
-    const rowCount = action?.patch.fullSheetAfter?.rowCount ?? get().rowCount;
-    const colCount = action?.patch.fullSheetAfter?.colCount ?? get().colCount;
-    set({ workbook: { ...workbook }, rowCount, colCount, isDirty: true });
-    updateTitle();
+    if (!action) return;
+    const target = action.workbookAfter
+      ? action.workbookAfter.activeSheet
+      : action.sheetIndex ?? get().activeSheetIndex;
+    finishHistoryStep(get, set, views, target, action.patch?.fullSheetAfter);
   },
 
   newWorkbook: () => {
     get().clearRecoverySnapshot();
-    const newWb = createEmptyWorkbook();
-    const newEval = new Evaluator(newWb.sheets[0]);
-    const newHist = new HistoryManager(100);
-
     set({
-      workbook: newWb,
-      activeSheetIndex: 0,
-      activeCell: { r: 0, c: 0 },
-      selection: { r1: 0, c1: 0, r2: 0, c2: 0 },
-      isEditing: false,
-      editingValue: '',
+      ...freshWorkbookState(createEmptyWorkbook()),
       filePath: null,
       fileName: 'ตารางบันทึก',
       isDirty: false,
-      evaluator: newEval,
-      history: newHist,
-      clipboard: null,
-      cutRange: null,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: [],
       hasWarnedUnsupportedOverwrite: false,
@@ -765,8 +967,6 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     await get().clearRecoverySnapshot();
 
     const wb = await importFromXlsxBuffer(data);
-    const evalInstance = new Evaluator(wb.sheets[0]);
-    const histInstance = new HistoryManager(100);
     const fileName = filePath
       ? filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'ตารางบันทึก'
       : 'ตารางบันทึก';
@@ -776,19 +976,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     }
 
     set({
-      workbook: wb,
-      activeSheetIndex: 0,
-      activeCell: { r: 0, c: 0 },
-      selection: { r1: 0, c1: 0, r2: 0, c2: 0 },
-      isEditing: false,
-      editingValue: '',
+      ...freshWorkbookState(wb),
       filePath: filePath || null,
       fileName,
       isDirty: false,
-      evaluator: evalInstance,
-      history: histInstance,
-      clipboard: null,
-      cutRange: null,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: wb.unsupportedFeatures || [],
       hasWarnedUnsupportedOverwrite: false,
@@ -797,8 +988,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   saveWorkbook: async () => {
-    const { workbook } = get();
-    return await exportToXlsxBuffer(workbook);
+    const { workbook, activeSheetIndex } = get();
+    return await exportToXlsxBuffer({ ...workbook, activeSheet: activeSheetIndex });
   },
 
   markSaved: (filePath: string) => {
@@ -845,7 +1036,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   saveRecoverySnapshot: async () => {
-    const { workbook, filePath, fileName, isDirty, recoverySessionId } = get();
+    const { workbook, activeSheetIndex, filePath, fileName, isDirty, recoverySessionId } = get();
     if (!isDirty) return;
     const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
     if (electronAPI?.saveRecovery) {
@@ -855,7 +1046,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           originalPath: filePath,
           fileName,
           savedAt: Date.now(),
-          workbook,
+          // เก็บทุกชีต (รวมชีตซ่อน) และชีตที่เปิดอยู่
+          workbook: { ...workbook, activeSheet: activeSheetIndex },
         });
       } catch {}
     }
@@ -872,24 +1064,15 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   restoreRecoveryWorkbook: (recoveredWb: Workbook, origPath: string | null) => {
-    const evalInstance = new Evaluator(recoveredWb.sheets[0]);
-    const histInstance = new HistoryManager(100);
     const fileName = origPath
       ? origPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'ตารางกู้คืน'
       : 'ตารางกู้คืน';
 
     set({
-      workbook: recoveredWb,
-      activeSheetIndex: 0,
-      activeCell: { r: 0, c: 0 },
-      selection: { r1: 0, c1: 0, r2: 0, c2: 0 },
-      isEditing: false,
-      editingValue: '',
+      ...freshWorkbookState(recoveredWb),
       filePath: origPath,
       fileName,
       isDirty: true,
-      evaluator: evalInstance,
-      history: histInstance,
       unsupportedFeatures: recoveredWb.unsupportedFeatures || [],
       hasWarnedUnsupportedOverwrite: false,
     });
@@ -906,28 +1089,129 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   loadTemplate: (wb: Workbook, templateName: string) => {
     get().clearRecoverySnapshot();
-    const evalInstance = new Evaluator(wb.sheets[0]);
-    const histInstance = new HistoryManager(100);
-
     set({
-      workbook: wb,
-      activeSheetIndex: 0,
-      activeCell: { r: 1, c: 0 },
-      selection: { r1: 1, c1: 0, r2: 1, c2: 0 },
-      isEditing: false,
-      editingValue: '',
+      ...freshWorkbookState(wb, { r: 1, c: 0 }),
       filePath: null,
       fileName: templateName,
       isDirty: false,
-      evaluator: evalInstance,
-      history: histInstance,
-      clipboard: null,
-      cutRange: null,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: [],
       hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
+  },
+
+  // --- Phase 4B: หลายชีต ---
+
+  getActiveSheetView: () => {
+    const { workbook, activeSheetIndex, sheetViews } = get();
+    const id = workbook.sheets[activeSheetIndex]?.id;
+    return (id && sheetViews[id]) || defaultSheetView();
+  },
+
+  rememberScroll: (scrollTop: number, scrollLeft: number) => {
+    // แก้ค่าตรงๆ ไม่เรียก set เพื่อไม่ให้ตาราง re-render ทุกครั้งที่เลื่อน
+    const { workbook, activeSheetIndex, sheetViews } = get();
+    const id = workbook.sheets[activeSheetIndex]?.id;
+    if (!id) return;
+    if (!sheetViews[id]) sheetViews[id] = defaultSheetView();
+    sheetViews[id].scrollTop = scrollTop;
+    sheetViews[id].scrollLeft = scrollLeft;
+  },
+
+  switchSheet: (index: number) => {
+    const { workbook, activeSheetIndex, isEditing, commitEditing } = get();
+    const target = workbook.sheets[index];
+    if (!target || target.hidden || index === activeSheetIndex) return;
+
+    if (isEditing) {
+      commitEditing(0, 0);
+    }
+
+    const views = captureView(get);
+    workbook.activeSheet = index;
+    set({ ...viewStateFor(workbook, index, views), sheetViews: views });
+  },
+
+  nextSheet: () => {
+    const { workbook, activeSheetIndex, switchSheet } = get();
+    const next = adjacentVisibleSheet(workbook, activeSheetIndex, 1);
+    if (next !== null) switchSheet(next);
+  },
+
+  prevSheet: () => {
+    const { workbook, activeSheetIndex, switchSheet } = get();
+    const prev = adjacentVisibleSheet(workbook, activeSheetIndex, -1);
+    if (prev !== null) switchSheet(prev);
+  },
+
+  addSheet: () => {
+    runSheetOp(get, set, 'Add sheet', (wb) => opAddSheet(wb), {
+      affectedBefore: get().activeSheetIndex,
+      show: 'result',
+    });
+  },
+
+  duplicateSheet: (index: number) => {
+    runSheetOp(get, set, 'Duplicate sheet', (wb) => opDuplicateSheet(wb, index), {
+      affectedBefore: index,
+      show: 'result',
+    });
+  },
+
+  renameSheet: (index: number, newName: string) => {
+    const { workbook } = get();
+    const sheet = workbook.sheets[index];
+    if (!sheet) return { success: false };
+    if (sheet.name === newName.trim()) return { success: true };
+
+    const res = runSheetOp(get, set, 'Rename sheet', (wb) => opRenameSheet(wb, index, newName), {
+      affectedBefore: index,
+      show: 'keep',
+    });
+    return { success: res.ok, error: res.error };
+  },
+
+  deleteSheet: (index: number) => {
+    const { workbook } = get();
+    const sheet = workbook.sheets[index];
+    if (!sheet) return { success: false };
+
+    const visibleCount = workbook.sheets.filter((s) => !s.hidden).length;
+    if (visibleCount <= 1) {
+      return { success: false, error: th.sheetTabs.cannotDeleteLastSheet };
+    }
+
+    set({
+      pendingDeleteSheet: {
+        sheetIndex: index,
+        sheetName: sheet.name,
+        referencingFormulaCount: countSheetReferences(workbook, index),
+      },
+    });
+    return { success: true };
+  },
+
+  confirmDeleteSheet: () => {
+    const { pendingDeleteSheet } = get();
+    if (!pendingDeleteSheet) return;
+    set({ pendingDeleteSheet: null });
+    const index = pendingDeleteSheet.sheetIndex;
+    runSheetOp(get, set, 'Delete sheet', (wb) => opDeleteSheet(wb, index), {
+      affectedBefore: index,
+      show: get().activeSheetIndex === index ? 'result' : 'keep',
+    });
+  },
+
+  cancelDeleteSheet: () => {
+    set({ pendingDeleteSheet: null });
+  },
+
+  moveSheet: (from: number, to: number) => {
+    runSheetOp(get, set, 'Move sheet', (wb) => opMoveSheet(wb, from, to), {
+      affectedBefore: from,
+      show: 'keep',
+    });
   },
 
   getRawValue: (r: number, c: number) => {
@@ -937,16 +1221,16 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   getComputedValue: (r: number, c: number) => {
-    const { evaluator } = get();
+    const { evaluator, activeSheetIndex } = get();
     const key = cellToA1(r, c);
-    return evaluator.getCellValue(key);
+    return evaluator.getCellValue(key, activeSheetIndex);
   },
 
   getDisplayValue: (r: number, c: number) => {
     const { workbook, activeSheetIndex, evaluator } = get();
     const key = cellToA1(r, c);
     const cell = workbook.sheets[activeSheetIndex]?.cells[key];
-    const val = evaluator.getCellValue(key);
+    const val = evaluator.getCellValue(key, activeSheetIndex);
     return formatDisplayValue(val, cell?.fmt);
   },
 
@@ -988,6 +1272,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         r2: selection.r2,
         c2: selection.c2,
         isCut: false,
+        sourceSheetId: workbook.sheets[activeSheetIndex]?.id,
       },
       cutRange: null,
     });
@@ -1022,6 +1307,11 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     if (clipboard && Object.keys(clipboard.cells).length > 0) {
       const dr = activeCell.r - clipboard.r1;
       const dc = activeCell.c - clipboard.c1;
+      // ชีตต้นทางของคลิปบอร์ด (อาจเป็นชีตอื่น) ใช้คำนวณค่าตอนวางเฉพาะค่า และล้างเซลตอนตัด
+      const srcIndex = clipboard.sourceSheetId
+        ? workbook.sheets.findIndex((s) => s.id === clipboard.sourceSheetId) // -1 = ชีตต้นทางถูกลบไปแล้ว
+        : activeSheetIndex;
+      const valueSheetIndex = srcIndex >= 0 ? srcIndex : activeSheetIndex;
 
       // Check if copying single cell into multi-cell target selection
       const isSingleCopied = clipboard.r1 === clipboard.r2 && clipboard.c1 === clipboard.c2;
@@ -1037,7 +1327,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
             let rawVal = srcCell ? srcCell.raw : '';
             if (rawVal.startsWith('=')) {
               if (valuesOnly) {
-                rawVal = String(evaluator.getCellValue(cellToA1(clipboard.r1, clipboard.c1)));
+                rawVal = String(evaluator.getCellValue(cellToA1(clipboard.r1, clipboard.c1), valueSheetIndex));
               } else {
                 rawVal = shiftFormula(rawVal, r - clipboard.r1, c - clipboard.c1);
               }
@@ -1050,7 +1340,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
                 ? (prev?.style ? { ...prev.style } : undefined)
                 : (srcCell?.style ? { ...srcCell.style } : undefined),
             };
-            evaluator.invalidate(destKey);
+            evaluator.invalidate(destKey, activeSheetIndex);
             patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
           }
         }
@@ -1068,7 +1358,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           let rawVal = cell.raw;
           if (rawVal.startsWith('=')) {
             if (valuesOnly) {
-              rawVal = String(evaluator.getCellValue(srcKey));
+              rawVal = String(evaluator.getCellValue(srcKey, valueSheetIndex));
             } else {
               rawVal = shiftFormula(rawVal, dr, dc);
             }
@@ -1081,18 +1371,27 @@ export const useSheetStore = create<SheetState>((set, get) => ({
               ? (prev?.style ? { ...prev.style } : undefined)
               : (cell.style ? { ...cell.style } : undefined),
           };
-          evaluator.invalidate(destKey);
+          evaluator.invalidate(destKey, activeSheetIndex);
           patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
         }
       }
 
-      // If cut operation, clear original cut cells
-      if (clipboard.isCut) {
+      // If cut operation, clear original cut cells (ในชีตต้นทาง ซึ่งอาจเป็นชีตอื่น)
+      const sourcePatches: SheetCellPatch[] = [];
+      if (clipboard.isCut && srcIndex >= 0) {
+        const srcSheet = workbook.sheets[srcIndex];
+        const sameSheet = srcIndex === activeSheetIndex;
         for (const srcKey of Object.keys(clipboard.cells)) {
-          if (!sheet.cells[srcKey] || patches.some((p) => p.key === srcKey)) continue;
-          patches.push({ key: srcKey, before: { ...sheet.cells[srcKey] }, after: undefined });
-          delete sheet.cells[srcKey];
-          evaluator.invalidate(srcKey);
+          if (!srcSheet.cells[srcKey]) continue;
+          if (sameSheet && patches.some((p) => p.key === srcKey)) continue;
+          const patch = { key: srcKey, before: { ...srcSheet.cells[srcKey] }, after: undefined };
+          if (sameSheet) {
+            patches.push(patch);
+          } else {
+            sourcePatches.push({ ...patch, sheetIndex: srcIndex });
+          }
+          delete srcSheet.cells[srcKey];
+          evaluator.invalidate(srcKey, srcIndex);
         }
       }
 
@@ -1100,6 +1399,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         description: valuesOnly ? 'Paste values' : 'Paste',
         sheetIndex: activeSheetIndex,
         patch: { cellPatches: patches },
+        extraCellPatches: sourcePatches.length > 0 ? sourcePatches : undefined,
       });
 
       set({
@@ -1132,7 +1432,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
               fmt: prev?.fmt,
               style: prev?.style ? { ...prev.style } : undefined,
             };
-            evaluator.invalidate(destKey);
+            evaluator.invalidate(destKey, activeSheetIndex);
             patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
           }
         }
@@ -1159,7 +1459,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       colCount,
     };
     opInsertRow(sheet, atRow, 1);
-    evaluator.setSheet(sheet);
+    evaluator.setWorkbook(workbook);
     const newRowCount = rowCount + 1;
     const fullAfter = {
       cells: JSON.parse(JSON.stringify(sheet.cells)),
@@ -1200,7 +1500,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       colCount,
     };
     opDeleteRow(sheet, atRow, 1);
-    evaluator.setSheet(sheet);
+    evaluator.setWorkbook(workbook);
     const newRowCount = Math.max(1, rowCount - 1);
     const fullAfter = {
       cells: JSON.parse(JSON.stringify(sheet.cells)),
@@ -1232,7 +1532,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       colCount,
     };
     opInsertCol(sheet, atCol, 1);
-    evaluator.setSheet(sheet);
+    evaluator.setWorkbook(workbook);
     const newColCount = colCount + 1;
     const fullAfter = {
       cells: JSON.parse(JSON.stringify(sheet.cells)),
@@ -1273,7 +1573,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       colCount,
     };
     opDeleteCol(sheet, atCol, 1);
-    evaluator.setSheet(sheet);
+    evaluator.setWorkbook(workbook);
     const newColCount = Math.max(1, colCount - 1);
     const fullAfter = {
       cells: JSON.parse(JSON.stringify(sheet.cells)),
@@ -1369,7 +1669,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     for (const [key, cell] of Object.entries(fillResult.cellsToSet)) {
       const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
       sheet.cells[key] = { ...cell };
-      evaluator.invalidate(key);
+      evaluator.invalidate(key, activeSheetIndex);
       patches.push({ key, before: prev, after: { ...cell } });
     }
 
@@ -1397,7 +1697,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     for (const [key, cell] of Object.entries(res)) {
       const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
       sheet.cells[key] = { ...cell };
-      evaluator.invalidate(key);
+      evaluator.invalidate(key, activeSheetIndex);
       patches.push({ key, before: prev, after: { ...cell } });
     }
 
@@ -1421,7 +1721,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     for (const [key, cell] of Object.entries(res)) {
       const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
       sheet.cells[key] = { ...cell };
-      evaluator.invalidate(key);
+      evaluator.invalidate(key, activeSheetIndex);
       patches.push({ key, before: prev, after: { ...cell } });
     }
 

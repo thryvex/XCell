@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { useSheetStore, SelectionState } from './store';
 import { Cell } from './Cell';
 import { ContextMenu, ContextMenuTarget } from './ContextMenu';
@@ -35,6 +35,11 @@ export const Grid: React.FC = () => {
     rowCount,
     colCount,
     cutRange,
+    clipboard,
+    nextSheet,
+    prevSheet,
+    rememberScroll,
+    getActiveSheetView,
     setActiveCell,
     setSelection,
     startEditing,
@@ -73,6 +78,21 @@ export const Grid: React.FC = () => {
   } = useSheetStore();
 
   const sheet = workbook.sheets[activeSheetIndex];
+  const sheetId = sheet.id;
+
+  // แสดงกรอบ "ตัด" เฉพาะบนชีตต้นทาง
+  const visibleCutRange =
+    cutRange && (!clipboard?.sourceSheetId || clipboard.sourceSheetId === sheetId) ? cutRange : null;
+
+  // คืนตำแหน่งเลื่อนของชีตเมื่อสลับชีต (สถานะแยกต่อชีต)
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const view = getActiveSheetView();
+    el.scrollTop = view.scrollTop;
+    el.scrollLeft = view.scrollLeft;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetId]);
 
   // Mouse states
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -169,6 +189,18 @@ export const Grid: React.FC = () => {
       if (isEditing) return;
 
       const isCtrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+PageUp / Ctrl+PageDown สลับชีต
+      if (isCtrl && e.key === 'PageUp') {
+        e.preventDefault();
+        prevSheet();
+        return;
+      }
+      if (isCtrl && e.key === 'PageDown') {
+        e.preventDefault();
+        nextSheet();
+        return;
+      }
 
       if (isCtrl && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -294,6 +326,8 @@ export const Grid: React.FC = () => {
     toggleBold,
     toggleItalic,
     toggleUnderline,
+    nextSheet,
+    prevSheet,
   ]);
 
   // Point mode cell click / regular selection
@@ -553,6 +587,7 @@ export const Grid: React.FC = () => {
   return (
     <div
       ref={containerRef}
+      onScroll={(e) => rememberScroll(e.currentTarget.scrollTop, e.currentTarget.scrollLeft)}
       style={{
         flex: 1,
         overflow: 'auto',
@@ -785,11 +820,11 @@ export const Grid: React.FC = () => {
                       c <= selection.c2;
                     const isActive = r === activeCell.r && c === activeCell.c;
                     const isCut =
-                      cutRange !== null &&
-                      r >= cutRange.r1 &&
-                      r <= cutRange.r2 &&
-                      c >= cutRange.c1 &&
-                      c <= cutRange.c2;
+                      visibleCutRange !== null &&
+                      r >= visibleCutRange.r1 &&
+                      r <= visibleCutRange.r2 &&
+                      c >= visibleCutRange.c1 &&
+                      c <= visibleCutRange.c2;
 
                     // Reference color highlight
                     const highlightColor = refHighlights[a1];

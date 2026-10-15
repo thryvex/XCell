@@ -95,7 +95,7 @@ describe('src/core/history', () => {
 
     // Undo row insertion
     const undoAction = history.undo(wb);
-    expect(undoAction?.patch.fullSheetBefore?.rowCount).toBe(100);
+    expect(undoAction?.patch?.fullSheetBefore?.rowCount).toBe(100);
     expect(wb.sheets[0].cells['A1'].raw).toBe('10');
     expect(wb.sheets[0].cells['A2'].raw).toBe('=A1*2');
     expect(wb.sheets[0].cells['A3']).toBeUndefined();

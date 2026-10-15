@@ -1,4 +1,4 @@
-import { CellValue, CellError, Sheet } from './model';
+import { CellValue, Sheet, Workbook } from './model';
 import { tokenize, Token } from './tokenizer';
 import { parseA1, parseRange, cellToA1 } from './address';
 import { FUNCTIONS, isCellError } from './functions';
@@ -8,8 +8,9 @@ export type ASTNode =
   | { type: 'Number'; value: number }
   | { type: 'String'; value: string }
   | { type: 'Boolean'; value: boolean }
-  | { type: 'CellRef'; a1: string }
-  | { type: 'Range'; rangeStr: string }
+  | { type: 'Error'; value: string }
+  | { type: 'CellRef'; a1: string; sheet?: string }
+  | { type: 'Range'; rangeStr: string; sheet?: string }
   | { type: 'UnaryOp'; op: '+' | '-'; expr: ASTNode }
   | { type: 'PostfixOp'; op: '%'; expr: ASTNode }
   | { type: 'BinaryOp'; op: string; left: ASTNode; right: ASTNode }
@@ -164,14 +165,19 @@ export class FormulaParser {
       return { type: 'Boolean', value: t.value.toUpperCase() === 'TRUE' };
     }
 
+    if (t.type === 'ERROR') {
+      this.consume();
+      return { type: 'Error', value: t.value };
+    }
+
     if (t.type === 'CELL_REF') {
       this.consume();
-      return { type: 'CellRef', a1: t.value.toUpperCase() };
+      return { type: 'CellRef', a1: t.value.toUpperCase(), sheet: t.sheet };
     }
 
     if (t.type === 'RANGE') {
       this.consume();
-      return { type: 'Range', rangeStr: t.value.toUpperCase() };
+      return { type: 'Range', rangeStr: t.value.toUpperCase(), sheet: t.sheet };
     }
 
     if (t.type === 'FUNCTION') {
@@ -213,22 +219,42 @@ export class FormulaParser {
   }
 }
 
-// Extract dependent cell addresses from formula
-export function extractDependencies(rawFormula: string): string[] {
+/** คืน index ของชีตจากชื่อ (ไม่สนตัวพิมพ์เล็ก/ใหญ่) หรือ -1 ถ้าไม่มี */
+export type SheetResolver = (name: string) => number;
+
+/** key ของเซลในกราฟ dependency ระดับสมุดงาน เช่น "0!A1" */
+export function qualifiedKey(sheetIndex: number, a1: string): string {
+  return `${sheetIndex}!${a1.toUpperCase()}`;
+}
+
+// Extract dependent cell addresses (sheet-qualified) from formula
+export function extractDependencies(
+  rawFormula: string,
+  sheetIndex = 0,
+  resolveSheet?: SheetResolver
+): string[] {
   if (!rawFormula || !rawFormula.startsWith('=')) return [];
   const deps: Set<string> = new Set();
   const tokens = tokenize(rawFormula);
 
   for (const t of tokens) {
+    if (t.type !== 'CELL_REF' && t.type !== 'RANGE') continue;
+
+    let targetIndex = sheetIndex;
+    if (t.sheet !== undefined) {
+      targetIndex = resolveSheet ? resolveSheet(t.sheet) : -1;
+      if (targetIndex < 0) continue;
+    }
+
     if (t.type === 'CELL_REF') {
       const p = parseA1(t.value);
-      if (p) deps.add(cellToA1(p.r, p.c));
-    } else if (t.type === 'RANGE') {
+      if (p) deps.add(qualifiedKey(targetIndex, cellToA1(p.r, p.c)));
+    } else {
       const rng = parseRange(t.value);
       if (rng) {
         for (let r = rng.r1; r <= rng.r2; r++) {
           for (let c = rng.c1; c <= rng.c2; c++) {
-            deps.add(cellToA1(r, c));
+            deps.add(qualifiedKey(targetIndex, cellToA1(r, c)));
           }
         }
       }
@@ -238,70 +264,96 @@ export function extractDependencies(rawFormula: string): string[] {
   return Array.from(deps);
 }
 
-// Evaluator Class
+function isWorkbook(source: Sheet | Workbook): source is Workbook {
+  return Array.isArray((source as Workbook).sheets);
+}
+
+// Evaluator Class: คำนวณทั้งสมุดงาน (ทุกชีต รวมชีตซ่อน) ด้วย dependency graph ข้ามชีต
 export class Evaluator {
-  private sheet: Sheet;
-  private cache: Record<string, CellValue> = {};
+  private wb: Workbook;
+  private cache: Map<string, CellValue> = new Map();
   private calculating: Set<string> = new Set();
-  private depGraph: Map<string, Set<string>> = new Map(); // cell -> cells it depends on
   private revDepGraph: Map<string, Set<string>> = new Map(); // cell -> cells that depend on it
+  private sheetIndexByName: Map<string, number> = new Map();
 
-  constructor(sheet: Sheet) {
-    this.sheet = sheet;
-    this.buildDepGraph();
+  constructor(source: Sheet | Workbook) {
+    this.wb = isWorkbook(source) ? source : { sheets: [source], activeSheet: 0 };
+    this.rebuild();
   }
 
+  /** ใช้เมื่อโครงสร้างสมุดงานเปลี่ยน (เพิ่ม/ลบ/เปลี่ยนชื่อ/ย้ายชีต, Undo/Redo, แทรก/ลบแถว) */
+  public setWorkbook(wb: Workbook) {
+    this.wb = wb;
+    this.rebuild();
+  }
+
+  /** รูปแบบเดิมสำหรับสมุดงานชีตเดียว */
   public setSheet(sheet: Sheet) {
-    this.sheet = sheet;
-    this.cache = {};
-    this.calculating.clear();
-    this.buildDepGraph();
+    this.setWorkbook({ sheets: [sheet], activeSheet: 0 });
   }
 
-  private buildDepGraph() {
-    this.depGraph.clear();
-    this.revDepGraph.clear();
+  public resolveSheet = (name: string): number => {
+    const idx = this.sheetIndexByName.get(name.toLowerCase());
+    return idx === undefined ? -1 : idx;
+  };
 
-    for (const [cellKey, cell] of Object.entries(this.sheet.cells)) {
-      if (cell.raw && cell.raw.startsWith('=')) {
-        const deps = extractDependencies(cell.raw);
-        this.depGraph.set(cellKey, new Set(deps));
-        for (const dep of deps) {
-          if (!this.revDepGraph.has(dep)) {
-            this.revDepGraph.set(dep, new Set());
-          }
-          this.revDepGraph.get(dep)!.add(cellKey);
+  private rebuild() {
+    this.cache.clear();
+    this.calculating.clear();
+    this.revDepGraph.clear();
+    this.sheetIndexByName.clear();
+
+    this.wb.sheets.forEach((sheet, idx) => {
+      this.sheetIndexByName.set(sheet.name.toLowerCase(), idx);
+    });
+
+    this.wb.sheets.forEach((sheet, idx) => {
+      for (const [cellKey, cell] of Object.entries(sheet.cells)) {
+        if (cell.raw && cell.raw.startsWith('=')) {
+          this.addDependencies(idx, cellKey, cell.raw);
         }
       }
+    });
+  }
+
+  private addDependencies(sheetIndex: number, a1: string, raw: string) {
+    const key = qualifiedKey(sheetIndex, a1);
+    for (const dep of extractDependencies(raw, sheetIndex, this.resolveSheet)) {
+      if (!this.revDepGraph.has(dep)) {
+        this.revDepGraph.set(dep, new Set());
+      }
+      this.revDepGraph.get(dep)!.add(key);
     }
   }
 
-  public getCellValue(a1Key: string): CellValue {
-    const key = a1Key.toUpperCase();
-    if (key in this.cache) {
-      return this.cache[key];
+  public getCellValue(a1Key: string, sheetIndex = 0): CellValue {
+    const a1 = a1Key.toUpperCase();
+    const key = qualifiedKey(sheetIndex, a1);
+    const cached = this.cache.get(key);
+    if (cached !== undefined) {
+      return cached;
     }
 
     if (this.calculating.has(key)) {
       return '#CYCLE!';
     }
 
-    const cell = this.sheet.cells[key];
+    const cell = this.wb.sheets[sheetIndex]?.cells[a1];
     if (!cell || cell.raw === '' || cell.raw === undefined || cell.raw === null) {
-      this.cache[key] = '';
+      this.cache.set(key, '');
       return '';
     }
 
     // Preserve cached value for unsupported formulas
     if (cell.unsupportedFormula && cell.cachedValue !== undefined) {
-      this.cache[key] = cell.cachedValue;
+      this.cache.set(key, cell.cachedValue);
       return cell.cachedValue;
     }
 
     // Plain text escaping with leading single quote: 'hello
     if (cell.raw.startsWith("'")) {
       const val = cell.raw.slice(1);
-      this.cache[key] = val;
+      this.cache.set(key, val);
       return val;
     }
 
@@ -311,12 +363,12 @@ export class Evaluator {
     if (trimmed.startsWith('=')) {
       this.calculating.add(key);
       try {
-        const val = this.evaluateFormula(trimmed);
-        this.cache[key] = val;
+        const val = this.evaluateFormula(trimmed, sheetIndex);
+        this.cache.set(key, val);
         return val;
       } catch (err: any) {
         const errCode = isCellError(err.message) ? err.message : '#ERR';
-        this.cache[key] = errCode;
+        this.cache.set(key, errCode);
         return errCode;
       } finally {
         this.calculating.delete(key);
@@ -327,27 +379,32 @@ export class Evaluator {
     const cleaned = trimmed.replace(/,/g, '');
     if (cleaned !== '' && !isNaN(Number(cleaned))) {
       const num = Number(cleaned);
-      this.cache[key] = num;
+      this.cache.set(key, num);
       return num;
     }
 
-    this.cache[key] = cell.raw;
+    this.cache.set(key, cell.raw);
     return cell.raw;
   }
 
-  public evaluateFormula(formulaText: string): CellValue {
+  public evaluateFormula(formulaText: string, sheetIndex = 0): CellValue {
     try {
       const tokens = tokenize(formulaText);
       const parser = new FormulaParser(tokens);
       const ast = parser.parse();
-      return this.evalAST(ast);
+      return this.evalAST(ast, sheetIndex);
     } catch (err: any) {
       if (isCellError(err.message)) return err.message;
       return '#ERR';
     }
   }
 
-  private evalAST(node: ASTNode): any {
+  private targetSheet(refSheet: string | undefined, sheetIndex: number): number {
+    if (refSheet === undefined) return sheetIndex;
+    return this.resolveSheet(refSheet);
+  }
+
+  private evalAST(node: ASTNode, sheetIndex: number): any {
     switch (node.type) {
       case 'Number':
         return node.value;
@@ -358,25 +415,31 @@ export class Evaluator {
       case 'Boolean':
         return node.value;
 
+      case 'Error':
+        return node.value;
+
       case 'CellRef': {
-        const val = this.getCellValue(node.a1);
-        return val;
+        const target = this.targetSheet(node.sheet, sheetIndex);
+        if (target < 0) return '#REF!';
+        return this.getCellValue(node.a1, target);
       }
 
       case 'Range': {
+        const target = this.targetSheet(node.sheet, sheetIndex);
+        if (target < 0) return '#REF!';
         const rng = parseRange(node.rangeStr);
         if (!rng) return '#REF!';
         const values: CellValue[] = [];
         for (let r = rng.r1; r <= rng.r2; r++) {
           for (let c = rng.c1; c <= rng.c2; c++) {
-            values.push(this.getCellValue(cellToA1(r, c)));
+            values.push(this.getCellValue(cellToA1(r, c), target));
           }
         }
         return values;
       }
 
       case 'UnaryOp': {
-        const val = this.evalAST(node.expr);
+        const val = this.evalAST(node.expr, sheetIndex);
         if (isCellError(val)) return val;
         const num = Number(val);
         if (isNaN(num)) return '#VALUE!';
@@ -385,7 +448,7 @@ export class Evaluator {
 
       case 'PostfixOp': {
         if (node.op === '%') {
-          const val = this.evalAST(node.expr);
+          const val = this.evalAST(node.expr, sheetIndex);
           if (isCellError(val)) return val;
           const num = Number(val);
           if (isNaN(num)) return '#VALUE!';
@@ -395,8 +458,8 @@ export class Evaluator {
       }
 
       case 'BinaryOp': {
-        const left = this.evalAST(node.left);
-        const right = this.evalAST(node.right);
+        const left = this.evalAST(node.left, sheetIndex);
+        const right = this.evalAST(node.right, sheetIndex);
         if (isCellError(left)) return left;
         if (isCellError(right)) return right;
 
@@ -438,7 +501,7 @@ export class Evaluator {
         // Evaluate arguments
         const evaluatedArgs: any[] = [];
         for (const argNode of node.args) {
-          evaluatedArgs.push(this.evalAST(argNode));
+          evaluatedArgs.push(this.evalAST(argNode, sheetIndex));
         }
 
         return fn(...evaluatedArgs);
@@ -468,9 +531,10 @@ export class Evaluator {
     }
   }
 
-  // Invalidate cache for a cell and all dependent cells
-  public invalidate(cellKey: string) {
-    const key = cellKey.toUpperCase();
+  // Invalidate cache for a cell and all dependent cells (รวมเซลในชีตอื่นที่อ้างถึง)
+  public invalidate(cellKey: string, sheetIndex = 0) {
+    const a1 = cellKey.toUpperCase();
+    const key = qualifiedKey(sheetIndex, a1);
     const toInvalidate: Set<string> = new Set([key]);
     const queue = [key];
 
@@ -488,22 +552,13 @@ export class Evaluator {
     }
 
     for (const cell of toInvalidate) {
-      delete this.cache[cell];
+      this.cache.delete(cell);
     }
 
-    // Rebuild graph for changed cell if needed
-    const raw = this.sheet.cells[key]?.raw;
+    // Register dependencies of the changed cell
+    const raw = this.wb.sheets[sheetIndex]?.cells[a1]?.raw;
     if (raw && raw.startsWith('=')) {
-      const deps = extractDependencies(raw);
-      this.depGraph.set(key, new Set(deps));
-      for (const dep of deps) {
-        if (!this.revDepGraph.has(dep)) {
-          this.revDepGraph.set(dep, new Set());
-        }
-        this.revDepGraph.get(dep)!.add(key);
-      }
-    } else {
-      this.depGraph.delete(key);
+      this.addDependencies(sheetIndex, a1, raw);
     }
   }
 }

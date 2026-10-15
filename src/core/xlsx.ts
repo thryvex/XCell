@@ -47,9 +47,10 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
   excelWorkbook.created = new Date();
   excelWorkbook.modified = new Date();
 
-  for (const sheetModel of wbModel.sheets) {
+  const evaluator = new Evaluator(wbModel);
+
+  for (const [sheetIndex, sheetModel] of wbModel.sheets.entries()) {
     const ws = excelWorkbook.addWorksheet(sheetModel.name || 'Sheet1');
-    const evaluator = new Evaluator(sheetModel);
 
     // Apply views (freezing)
     if (sheetModel.frozenRows > 0 || sheetModel.frozenCols > 0) {
@@ -94,7 +95,7 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
         if (cellData.unsupportedFormula && cellData.cachedValue !== undefined) {
           resultVal = cellData.cachedValue;
         } else {
-          const computed = evaluator.getCellValue(key);
+          const computed = evaluator.getCellValue(key, sheetIndex);
           resultVal = typeof computed === 'number' || typeof computed === 'string' ? computed : undefined;
 
           if (typeof computed === 'string' && (isCellError(computed) || computed in THAI_TO_ERROR_MAP)) {

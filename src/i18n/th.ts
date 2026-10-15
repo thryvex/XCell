@@ -235,5 +235,6 @@ export const th = {
     nameDuplicate: 'มีชีตชื่อ "{name}" อยู่แล้ว',
     copyOf: 'สำเนาของ {name}',
     defaultSheetPrefix: 'ชีต',
+    tabTooltip: '{name} (ดับเบิลคลิกเพื่อเปลี่ยนชื่อ, คลิกขวาสำหรับตัวเลือก)',
   },
 };
