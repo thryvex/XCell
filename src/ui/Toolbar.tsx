@@ -9,6 +9,8 @@ interface ToolbarProps {
   onOpenRecent: (path: string) => void;
   onSave: () => void;
   onSaveAs: () => void;
+  onExportCsv: () => void;
+  onImportCsv: () => void;
   onOpenHelp: () => void;
 }
 
@@ -19,7 +21,16 @@ const PRESET_COLORS = [
   '#bbf7d0', '#bfdbfe',
 ];
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, onSave, onSaveAs, onOpenHelp }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({
+  onNew,
+  onOpen,
+  onOpenRecent,
+  onSave,
+  onSaveAs,
+  onOpenHelp,
+  onExportCsv,
+  onImportCsv,
+}) => {
   const {
     undo,
     redo,
@@ -59,6 +70,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
   const [fillColorOpen, setFillColorOpen] = useState(false);
   const [borderMenuOpen, setBorderMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
 
   const dropdownStyle: React.CSSProperties = {
     position: 'absolute',
@@ -106,6 +118,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
     setFillColorOpen(false);
     setBorderMenuOpen(false);
     setSortMenuOpen(false);
+    setFileMenuOpen(false);
   };
 
   const activeBtnStyle = (isActive?: boolean): React.CSSProperties => ({
@@ -215,6 +228,30 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
       <button onClick={onSaveAs} title={th.toolbar.saveAsFileTooltip}>
         {th.toolbar.saveAsFile}
       </button>
+
+      {/* ไฟล์ > ส่งออก / นำเข้า CSV (4D) */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            const next = !fileMenuOpen;
+            closeAllMenus();
+            setFileMenuOpen(next);
+          }}
+          title={th.csv.menuTooltip}
+        >
+          {th.csv.menu} ▾
+        </button>
+        {fileMenuOpen && (
+          <div style={dropdownStyle}>
+            <button style={dropdownItemStyle} onClick={() => { setFileMenuOpen(false); onExportCsv(); }}>
+              {th.csv.exportCsv}
+            </button>
+            <button style={dropdownItemStyle} onClick={() => { setFileMenuOpen(false); onImportCsv(); }}>
+              {th.csv.importCsv}
+            </button>
+          </div>
+        )}
+      </div>
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
 

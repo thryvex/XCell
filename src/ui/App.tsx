@@ -16,7 +16,8 @@ import { TemplateModal } from './TemplateModal';
 import { WelcomeGuideModal } from './WelcomeGuideModal';
 import { HelpModal } from './HelpModal';
 import { FormulaHelper } from './FormulaHelper';
-import { useSheetStore } from './store';
+import { useSheetStore, isCsvPath } from './store';
+import { CsvImportDialog } from './CsvImportDialog';
 import { th } from '../i18n/th';
 import { createLedgerWorkbook, createInventoryWorkbook } from '../templates';
 
@@ -48,6 +49,9 @@ export const App: React.FC = () => {
     setHasWarnedUnsupportedOverwrite,
     dismissUnsupportedBanner,
     loadTemplate,
+    fileName,
+    beginCsvImport,
+    getCsvExport,
   } = useSheetStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -74,6 +78,76 @@ export const App: React.FC = () => {
       setToastMessage(null);
     }, 3500);
   }, []);
+
+  // เปิดไฟล์จากไบต์: .csv ไปหน้าต่างนำเข้า CSV (งานใหม่), นอกนั้นเปิดเป็น .xlsx
+  const openFileBytes = useCallback(
+    async (data: Uint8Array, path: string) => {
+      if (isCsvPath(path)) {
+        beginCsvImport(data, path, 'open');
+        return;
+      }
+      await loadWorkbook(data, path);
+      showToast(th.messages.fileOpened);
+    },
+    [beginCsvImport, loadWorkbook, showToast]
+  );
+
+  // ส่งออก CSV (ชีตที่เปิดอยู่, ค่าที่แสดง)
+  const [csvFilterConfirmOpen, setCsvFilterConfirmOpen] = useState(false);
+  const runCsvExport = async () => {
+    try {
+      const { bytes, defaultName } = getCsvExport();
+      const electronAPI = (window as any).electronAPI;
+      if (electronAPI?.exportCsvDialog) {
+        const res = await electronAPI.exportCsvDialog(defaultName);
+        if (!res || res.canceled || !res.filePath) return;
+        const writeRes = await electronAPI.writeFile(res.filePath, Array.from(bytes)); // atomic (3C)
+        showToast(writeRes.success ? th.csv.exported : th.csv.exportFailed + writeRes.error);
+      } else {
+        const blob = new Blob([new Uint8Array(bytes)], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultName;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(th.csv.exported);
+      }
+    } catch (err: any) {
+      showToast(th.csv.exportFailed + (err.message || String(err)));
+    }
+  };
+  const handleExportCsv = () => {
+    if (getCsvExport().hasFilter) setCsvFilterConfirmOpen(true);
+    else runCsvExport();
+  };
+
+  // นำเข้า CSV เป็นชีตใหม่ในไฟล์ที่เปิดอยู่
+  const handleImportCsvAsSheet = async () => {
+    const electronAPI = (window as any).electronAPI;
+    try {
+      if (electronAPI?.openCsvFile) {
+        const res = await electronAPI.openCsvFile();
+        if (!res || res.canceled) return;
+        if (res.error || !res.data) {
+          showToast(th.csv.readFailed + (res.error || ''));
+          return;
+        }
+        beginCsvImport(new Uint8Array(res.data), res.filePath, 'newSheet');
+      } else {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.csv,.txt';
+        input.onchange = async (e: any) => {
+          const file = e.target.files?.[0];
+          if (file) beginCsvImport(new Uint8Array(await file.arrayBuffer()), file.name, 'newSheet');
+        };
+        input.click();
+      }
+    } catch (err: any) {
+      showToast(th.csv.readFailed + (err.message || String(err)));
+    }
+  };
 
   // Check whether to show Welcome Guide or Template Modal on startup
   const checkWelcomeOrTemplate = useCallback(async () => {
@@ -207,7 +281,8 @@ export const App: React.FC = () => {
       const buffer = await saveWorkbook();
 
       if (electronAPI) {
-        const saveDialogRes = await electronAPI.saveFile(filePath || undefined);
+        const defaultSavePath = filePath && !isCsvPath(filePath) ? filePath : `${fileName}.xlsx`;
+        const saveDialogRes = await electronAPI.saveFile(defaultSavePath);
         if (saveDialogRes && !saveDialogRes.canceled && saveDialogRes.filePath) {
           const writeRes = await electronAPI.writeFile(
             saveDialogRes.filePath,
@@ -246,7 +321,8 @@ export const App: React.FC = () => {
 
   // Save (handles unsupported overwrite warning on first Ctrl+S)
   const handleSave = async (): Promise<boolean> => {
-    if (!filePath) {
+    // งานที่มาจาก CSV ไม่มีไฟล์ปลายทาง: บันทึกเป็น .xlsx เสมอ (ห้ามเขียนทับ .csv)
+    if (!filePath || isCsvPath(filePath)) {
       return handleSaveAs();
     }
 
@@ -354,8 +430,7 @@ export const App: React.FC = () => {
           const res = await electronAPI.openFile();
           if (res && !res.canceled && res.data) {
             const uint8 = new Uint8Array(res.data);
-            await loadWorkbook(uint8, res.filePath);
-            showToast(th.messages.fileOpened);
+            await openFileBytes(uint8, res.filePath);
           }
         } else {
           // Fallback for browser testing
@@ -366,8 +441,7 @@ export const App: React.FC = () => {
             const file = e.target.files?.[0];
             if (file) {
               const buf = await file.arrayBuffer();
-              await loadWorkbook(new Uint8Array(buf), file.name);
-              showToast(th.messages.fileOpened);
+              await openFileBytes(new Uint8Array(buf), file.name);
             }
           };
           input.click();
@@ -392,8 +466,7 @@ export const App: React.FC = () => {
           }
           const res = await electronAPI.readFile(targetPath);
           if (res.success && res.data) {
-            await loadWorkbook(new Uint8Array(res.data), targetPath);
-            showToast(th.messages.fileOpened);
+            await openFileBytes(new Uint8Array(res.data), targetPath);
           } else {
             showToast(th.messages.fileOpenFailed + (res.error || ''));
           }
@@ -413,8 +486,7 @@ export const App: React.FC = () => {
           if (electronAPI?.readFile) {
             const res = await electronAPI.readFile(targetPath);
             if (res.success && res.data) {
-              await loadWorkbook(new Uint8Array(res.data), targetPath);
-              showToast(th.messages.fileOpened);
+              await openFileBytes(new Uint8Array(res.data), targetPath);
             } else {
               showToast(th.messages.fileOpenFailed + (res.error || ''));
             }
@@ -459,8 +531,7 @@ export const App: React.FC = () => {
     requestActionWithGuard(async () => {
       try {
         const buf = await file.arrayBuffer();
-        await loadWorkbook(new Uint8Array(buf), filePath);
-        showToast(th.messages.fileOpened);
+        await openFileBytes(new Uint8Array(buf), filePath);
       } catch (err: any) {
         showToast(th.messages.fileOpenFailed + (err.message || String(err)));
       }
@@ -559,6 +630,8 @@ export const App: React.FC = () => {
         onSave={handleSave}
         onSaveAs={handleSaveAs}
         onOpenHelp={() => setHelpModalOpen(true)}
+        onExportCsv={handleExportCsv}
+        onImportCsv={handleImportCsvAsSheet}
       />
 
       <FormulaBar />
@@ -752,6 +825,22 @@ export const App: React.FC = () => {
 
       {/* เรียงลำดับ (4C) */}
       <SortDialog />
+
+      {/* นำเข้า CSV (4D) */}
+      <CsvImportDialog />
+
+      {/* ส่งออก CSV ขณะมีตัวกรอง: บอกก่อนว่าจะส่งออกทุกแถว */}
+      <ConfirmDialog
+        isOpen={csvFilterConfirmOpen}
+        message={th.csv.exportFilterConfirm}
+        confirmText={th.csv.exportContinue}
+        cancelText={th.dialog.cancel}
+        onConfirm={() => {
+          setCsvFilterConfirmOpen(false);
+          runCsvExport();
+        }}
+        onCancel={() => setCsvFilterConfirmOpen(false)}
+      />
 
       {/* Formula Helper Dialog */}
       <FormulaHelper />

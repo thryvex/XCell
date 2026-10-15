@@ -11,6 +11,8 @@ export interface RecoveryItem {
 export interface ElectronAPI {
   openFile: () => Promise<{ canceled: boolean; filePath?: string; data?: number[]; error?: string } | null>;
   saveFile: (defaultPath?: string) => Promise<{ canceled: boolean; filePath?: string } | null>;
+  exportCsvDialog: (defaultPath?: string) => Promise<{ canceled: boolean; filePath?: string } | null>;
+  openCsvFile: () => Promise<{ canceled: boolean; filePath?: string; data?: number[]; error?: string } | null>;
   writeFile: (filePath: string, buffer: number[]) => Promise<{ success: boolean; error?: string }>;
   readFile: (filePath: string) => Promise<{ success: boolean; data?: number[]; error?: string }>;
   setTitle: (title: string) => void;
@@ -36,6 +38,8 @@ export interface ElectronAPI {
 const electronAPI: ElectronAPI = {
   openFile: () => ipcRenderer.invoke('dialog:openFile'),
   saveFile: (defaultPath) => ipcRenderer.invoke('dialog:saveFile', defaultPath),
+  exportCsvDialog: (defaultPath) => ipcRenderer.invoke('dialog:exportCsv', defaultPath),
+  openCsvFile: () => ipcRenderer.invoke('dialog:openCsv'),
   writeFile: (filePath, buffer) => ipcRenderer.invoke('fs:writeFile', filePath, buffer),
   readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
   setTitle: (title) => ipcRenderer.send('window:setTitle', title),

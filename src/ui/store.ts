@@ -70,6 +70,20 @@ import {
   computeHiddenRows,
   createFilter,
 } from '../core/filter';
+import {
+  CsvEncoding,
+  detectEncoding,
+  decodeBytes,
+  detectDelimiter,
+  looksBinary,
+  parseCsv,
+  csvExceedsLimits,
+  buildSheetFromCsv,
+  sheetNameFromFileName,
+  sheetToCsvRows,
+  writeCsv,
+  encodeUtf8WithBom,
+} from '../core/csv';
 
 export interface SelectionState {
   r1: number;
@@ -258,6 +272,25 @@ export interface SheetState {
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
+
+  // Phase 4D: CSV
+  pendingCsvImport: PendingCsvImport | null;
+  beginCsvImport: (bytes: Uint8Array, filePath: string | null, mode: 'open' | 'newSheet') => void;
+  updateCsvImport: (patch: Partial<Pick<PendingCsvImport, 'encoding' | 'delimiter' | 'autoConvert'>>) => void;
+  confirmCsvImport: () => void;
+  cancelCsvImport: () => void;
+  getCsvExport: () => { bytes: Uint8Array; defaultName: string; hasFilter: boolean };
+}
+
+export interface PendingCsvImport {
+  mode: 'open' | 'newSheet'; // open = งานใหม่จาก CSV, newSheet = เพิ่มเป็นชีตใหม่
+  filePath: string | null;
+  fileName: string;
+  bytes: Uint8Array;
+  encoding: CsvEncoding;
+  delimiter: string;
+  autoConvert: boolean;
+  step: 'options' | 'limitWarning';
 }
 
 export interface PendingSort {
@@ -707,6 +740,48 @@ function performSort(get: StoreGet, set: StoreSet, pending: PendingSort) {
   updateTitle();
 }
 
+/** path ของไฟล์ CSV: ห้ามใช้เป็นที่บันทึก (บันทึกเป็น .xlsx เสมอ) */
+export function isCsvPath(path: string | null | undefined): boolean {
+  return !!path && /\.(csv|txt)$/i.test(path);
+}
+
+/**
+ * นำเข้า CSV จริง:
+ * - open: งานใหม่ 1 ชีต ยังไม่มีชื่อไฟล์ (Ctrl+S = บันทึกเป็น .xlsx) ชื่อชีตตามชื่อไฟล์
+ * - newSheet: เพิ่มเป็นชีตใหม่ท้ายสมุดงานที่เปิดอยู่ (Undo ได้)
+ */
+function performCsvImport(get: StoreGet, set: StoreSet, p: PendingCsvImport, rows: string[][]) {
+  if (p.mode === 'newSheet') {
+    runSheetOp(
+      get,
+      set,
+      'Import CSV',
+      (wb) => {
+        const name = sheetNameFromFileName(p.fileName, wb.sheets.map((s) => s.name));
+        wb.sheets.push(buildSheetFromCsv(rows, name, p.autoConvert));
+        return { ok: true, index: wb.sheets.length - 1 };
+      },
+      { affectedBefore: get().activeSheetIndex, show: 'result' }
+    );
+    return;
+  }
+
+  get().clearRecoverySnapshot();
+  const sheet = buildSheetFromCsv(rows, sheetNameFromFileName(p.fileName), p.autoConvert);
+  if (p.filePath) get().addRecentFile(p.filePath);
+  set({
+    ...freshWorkbookState({ sheets: [sheet], activeSheet: 0 }),
+    filePath: null, // ห้ามเขียนทับไฟล์ .csv ต้นฉบับ
+    fileName: p.fileName.replace(/\.[^.]+$/, '') || th.csv.defaultName,
+    isDirty: false,
+    recoverySessionId: `recovery-${Date.now()}`,
+    unsupportedFeatures: [],
+    hiddenSheetNotice: 0,
+    hasWarnedUnsupportedOverwrite: false,
+  });
+  get().updateTitle();
+}
+
 const initialWb = ensureSheetIds(createEmptyWorkbook());
 const initialEvaluator = new Evaluator(initialWb);
 const initialHistory = new HistoryManager(100);
@@ -743,6 +818,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   pendingSort: null,
   notice: null,
   filteredRowsNotice: false,
+  pendingCsvImport: null,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -1427,7 +1503,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
     set({
       ...freshWorkbookState(recoveredWb),
-      filePath: origPath,
+      // งานที่มาจาก CSV: ไม่ผูกกับไฟล์ .csv เดิม (บันทึกเป็น .xlsx เสมอ)
+      filePath: isCsvPath(origPath) ? null : origPath,
       fileName,
       isDirty: true,
       unsupportedFeatures: recoveredWb.unsupportedFeatures || [],
@@ -1773,6 +1850,72 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   resetZoom: () => get().setZoom(100),
+
+  // --- Phase 4D: CSV ---
+
+  beginCsvImport: (bytes: Uint8Array, filePath: string | null, mode: 'open' | 'newSheet') => {
+    if (bytes.length === 0) {
+      set({ notice: th.csv.emptyFile });
+      return;
+    }
+    const encoding = detectEncoding(bytes);
+    if (looksBinary(bytes, encoding)) {
+      set({ notice: th.csv.notText });
+      return;
+    }
+    const text = decodeBytes(bytes, encoding);
+    if (text.trim() === '') {
+      set({ notice: th.csv.emptyFile });
+      return;
+    }
+    const fileName = (filePath ?? th.csv.defaultName).split(/[\\/]/).pop()!;
+    set({
+      pendingCsvImport: {
+        mode,
+        filePath,
+        fileName,
+        bytes,
+        encoding,
+        delimiter: detectDelimiter(text),
+        autoConvert: true,
+        step: 'options',
+      },
+    });
+  },
+
+  updateCsvImport: (patch) => {
+    const { pendingCsvImport } = get();
+    if (!pendingCsvImport) return;
+    set({ pendingCsvImport: { ...pendingCsvImport, ...patch, step: 'options' } });
+  },
+
+  confirmCsvImport: () => {
+    const { pendingCsvImport: p } = get();
+    if (!p) return;
+    const rows = parseCsv(decodeBytes(p.bytes, p.encoding), p.delimiter);
+    if (rows.length === 0 || rows.every((r) => r.every((v) => v === ''))) {
+      set({ pendingCsvImport: null, notice: th.csv.emptyFile });
+      return;
+    }
+    // เกินขีดจำกัด: ต้องให้ผู้ใช้ยืนยันก่อน ห้ามตัดข้อมูลเงียบๆ
+    if (p.step === 'options' && csvExceedsLimits(rows)) {
+      set({ pendingCsvImport: { ...p, step: 'limitWarning' } });
+      return;
+    }
+    set({ pendingCsvImport: null });
+    performCsvImport(get, set, p, rows);
+  },
+
+  cancelCsvImport: () => set({ pendingCsvImport: null }),
+
+  getCsvExport: () => {
+    const { workbook, activeSheetIndex, evaluator, fileName } = get();
+    const sheet = workbook.sheets[activeSheetIndex];
+    const text = writeCsv(sheetToCsvRows(sheet, evaluator, activeSheetIndex));
+    // ชื่อไฟล์เริ่มต้น = ชื่อไฟล์ปัจจุบัน + ชื่อชีต (ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้)
+    const defaultName = `${fileName} - ${sheet.name}.csv`.replace(/[<>:"/\\|?*]/g, '');
+    return { bytes: encodeUtf8WithBom(text), defaultName, hasFilter: !!sheet.filter };
+  },
 
   getRawValue: (r: number, c: number) => {
     const { workbook, activeSheetIndex } = get();

@@ -233,10 +233,8 @@ ipcMain.handle('dialog:saveFile', async (_event, defaultPath?: string) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'บันทึกเป็น',
     defaultPath: defaultPath || 'ตารางรายรับรายจ่าย.xlsx',
-    filters: [
-      { name: 'Excel Worksheet (*.xlsx)', extensions: ['xlsx'] },
-      { name: 'CSV File (*.csv)', extensions: ['csv'] },
-    ],
+    // บันทึกเป็น .xlsx เท่านั้น (CSV ใช้เมนู ส่งออก > CSV ซึ่งเขียนเฉพาะค่าที่แสดง)
+    filters: [{ name: 'Excel Worksheet (*.xlsx)', extensions: ['xlsx'] }],
   });
 
   if (result.canceled || !result.filePath) {
@@ -247,6 +245,38 @@ ipcMain.handle('dialog:saveFile', async (_event, defaultPath?: string) => {
     canceled: false,
     filePath: result.filePath,
   };
+});
+
+// ส่งออก CSV (4D)
+ipcMain.handle('dialog:exportCsv', async (_event, defaultPath?: string) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'ส่งออก CSV',
+    defaultPath: defaultPath || 'ตาราง.csv',
+    filters: [{ name: 'CSV (*.csv)', extensions: ['csv'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  return { canceled: false, filePath: result.filePath };
+});
+
+// นำเข้า CSV เป็นชีตใหม่ (4D)
+ipcMain.handle('dialog:openCsv', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'นำเข้า CSV',
+    properties: ['openFile'],
+    filters: [
+      { name: 'CSV (*.csv, *.txt)', extensions: ['csv', 'txt'] },
+      { name: 'ทุกไฟล์ (*.*)', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) return { canceled: true };
+  const filePath = result.filePaths[0];
+  try {
+    return { canceled: false, filePath, data: Array.from(fs.readFileSync(filePath)) };
+  } catch (err: any) {
+    return { canceled: false, filePath, error: formatFsError(err) };
+  }
 });
 
 // Atomic File Writing with Specific Thai Error Mapping (SPEC 6.2)
