@@ -13,7 +13,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
   onClose,
   onOpenWelcomeGuide,
 }) => {
-  const [activeTab, setActiveTab] = useState<'gs' | 'shortcuts' | 'about'>('gs');
+  const [activeTab, setActiveTab] = useState<'gs' | 'shortcuts' | 'features' | 'about'>('gs');
 
   if (!isOpen) return null;
 
@@ -124,6 +124,21 @@ export const HelpModal: React.FC<HelpModalProps> = ({
             ⌨️ {th.help.tabShortcuts}
           </button>
           <button
+            onClick={() => setActiveTab('features')}
+            style={{
+              border: 'none',
+              borderBottom: activeTab === 'features' ? '2px solid var(--color-primary)' : '2px solid transparent',
+              backgroundColor: 'transparent',
+              padding: '10px 14px',
+              fontWeight: activeTab === 'features' ? 600 : 400,
+              color: activeTab === 'features' ? 'var(--color-primary)' : 'var(--fg-main)',
+              cursor: 'pointer',
+              borderRadius: 0,
+            }}
+          >
+            ✨ {th.help.tabFeatures}
+          </button>
+          <button
             onClick={() => setActiveTab('about')}
             style={{
               border: 'none',
@@ -177,6 +192,22 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               >
                 💡 <b>ข้อดี:</b> สูตรคำนวณทั้งหมด, เซลที่ผสาน, สีและฟอนต์ รวมถึงรูปแบบ ฿ บาท จะแสดงผลและทำงานได้ทันทีบน Google Sheets โดยไม่ต้องปรับแต่งเพิ่ม
               </div>
+            </div>
+          )}
+
+          {/* Tab: ฟีเจอร์เพิ่มเติม (Phase 4) */}
+          {activeTab === 'features' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+              {th.help.features.map((section) => (
+                <div key={section.title}>
+                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>{section.title}</div>
+                  <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: 1.6 }}>
+                    {section.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           )}
 

@@ -71,6 +71,7 @@ export const App: React.FC = () => {
   const [welcomeGuideModalOpen, setWelcomeGuideModalOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const openedGuideFromHelp = useRef(false);
+  const openExternalRef = useRef<((path: string) => void) | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -226,6 +227,18 @@ export const App: React.FC = () => {
             hasRecovery = true;
           }
         } catch {}
+      }
+
+      // เปิดแอปด้วยไฟล์ (Open with): ขอ path จาก main เมื่อหน้าพร้อมแล้ว แล้วเปิดแทนหน้าต่างเลือกเทมเพลต
+      let initialFile: string | null = null;
+      if (electronAPI?.getInitialFile) {
+        try {
+          initialFile = await electronAPI.getInitialFile();
+        } catch {}
+      }
+      if (initialFile) {
+        openExternalRef.current?.(initialFile);
+        return;
       }
 
       if (!hasRecovery) {
@@ -498,6 +511,8 @@ export const App: React.FC = () => {
     },
     [isDirty, loadWorkbook, showToast]
   );
+  // ให้ effect ตอนเริ่มแอปเรียก handleOpenExternal ตัวล่าสุดได้
+  openExternalRef.current = handleOpenExternal;
 
   // Drag and Drop Handlers
   const handleDragOver = (e: React.DragEvent) => {

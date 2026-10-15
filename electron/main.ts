@@ -12,6 +12,8 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 let isForcedClose = false;
+// ไฟล์ที่ส่งมาตอนเปิดแอป (Open with): หน้าเว็บขอเองเมื่อพร้อม ป้องกันส่งก่อนที่ React จะรอรับ
+let pendingInitialFile: string | null = null;
 
 // Extract .xlsx / .csv path from command line arguments
 function extractFilePathFromArgs(args: string[]): string | null {
@@ -113,13 +115,6 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // When initial web contents finishes loading, check if file was provided via command line (Open with)
-  mainWindow.webContents.on('did-finish-load', () => {
-    const initialFile = extractFilePathFromArgs(process.argv);
-    if (initialFile && mainWindow) {
-      mainWindow.webContents.send('app:openExternalFile', initialFile);
-    }
-  });
 }
 
 // Recent Files Paths & Helpers
@@ -191,6 +186,12 @@ ipcMain.handle('prefs:get', async () => {
 ipcMain.handle('prefs:set', async (_event, prefs: AppPreferences) => {
   savePreferencesSync(prefs);
   return { success: true };
+});
+
+ipcMain.handle('app:getInitialFile', () => {
+  const p = pendingInitialFile;
+  pendingInitialFile = null; // ให้เปิดได้ครั้งเดียว
+  return p;
 });
 
 // IPC Handlers - File Dialogs
@@ -426,6 +427,7 @@ ipcMain.on('window:forceClose', () => {
 // App Lifecycle
 app.whenReady().then(() => {
   buildAppMenu();
+  pendingInitialFile = extractFilePathFromArgs(process.argv);
   createWindow();
 
   app.on('activate', () => {
