@@ -48,6 +48,17 @@ import {
   SearchOptions,
   DEFAULT_SEARCH_OPTIONS,
 } from '../core/search';
+import {
+  detectDataRegion,
+  detectHeaderRow,
+  rangeHasMerge,
+  rangeHasData,
+  formulasReferenceOtherRows,
+  sortRange,
+  CellRange,
+  SortKey,
+  SortDirection,
+} from '../core/sort';
 
 export interface SelectionState {
   r1: number;
@@ -209,6 +220,26 @@ export interface SheetState {
   setSearchOption: (key: keyof SearchOptions, value: boolean) => void;
   searchNext: () => void;
   searchPrev: () => void;
+
+  // Phase 4C: เรียงลำดับ
+  pendingSort: PendingSort | null;
+  notice: string | null; // ข้อความแจ้ง (ปุ่มตกลงอย่างเดียว)
+  dismissNotice: () => void;
+  requestSort: (dir: SortDirection) => void;
+  openAdvancedSort: () => void;
+  updatePendingSort: (patch: Partial<Pick<PendingSort, 'hasHeader' | 'keys'>>) => void;
+  confirmSort: () => void;
+  cancelSort: () => void;
+}
+
+export interface PendingSort {
+  mode: 'quick' | 'advanced';
+  range: CellRange;
+  hasHeader: boolean;
+  keys: SortKey[];
+  step: 'options' | 'formulaWarning';
+  // เรียงจากเมนูตัวกรอง: เรียงเฉพาะข้อมูลใต้หัวตาราง (ไม่มีหน้าต่างตัวเลือก)
+  fromFilter?: boolean;
 }
 
 export interface SearchState {
@@ -501,6 +532,74 @@ function runSearch(get: StoreGet, set: StoreSet, direction: 1 | -1, inclusive: b
   });
 }
 
+/**
+ * เตรียมการเรียงลำดับจากเซล/ช่วงที่เลือก: หาช่วง, ตรวจเซลผสาน, เดาหัวตาราง
+ * คืน null ถ้าเรียงไม่ได้ (และแสดงข้อความถ้าจำเป็น)
+ */
+function prepareSort(get: StoreGet, set: StoreSet, mode: 'quick' | 'advanced'): PendingSort | null {
+  const { isEditing, commitEditing } = get();
+  if (isEditing) commitEditing(0, 0);
+
+  const { workbook, activeSheetIndex, activeCell, selection, evaluator } = get();
+  const sheet = workbook.sheets[activeSheetIndex];
+  const isMulti = selection.r1 !== selection.r2 || selection.c1 !== selection.c2;
+  const range: CellRange = isMulti
+    ? { ...selection }
+    : detectDataRegion(sheet, activeCell.r, activeCell.c);
+
+  if (!rangeHasData(sheet, range) || range.r1 === range.r2) {
+    set({ notice: th.sort.noData });
+    return null;
+  }
+  if (rangeHasMerge(sheet, range)) {
+    set({ notice: th.sort.mergedError });
+    return null;
+  }
+
+  const col = Math.min(range.c2, Math.max(range.c1, activeCell.c));
+  return {
+    mode,
+    range,
+    hasHeader: detectHeaderRow(sheet, evaluator, activeSheetIndex, range),
+    keys: [{ col, dir: 'asc' }],
+    step: 'options',
+  };
+}
+
+/** เรียงลำดับจริง + บันทึก Undo หนึ่งขั้น */
+function performSort(get: StoreGet, set: StoreSet, pending: PendingSort) {
+  const { workbook, activeSheetIndex, evaluator, history, updateTitle } = get();
+  const sheet = workbook.sheets[activeSheetIndex];
+  if (rangeHasMerge(sheet, pending.range)) {
+    set({ notice: th.sort.mergedError });
+    return;
+  }
+
+  const patches = sortRange(
+    sheet,
+    evaluator,
+    activeSheetIndex,
+    pending.range,
+    pending.keys,
+    pending.hasHeader
+  );
+  if (patches.length === 0) return;
+
+  history.push({
+    description: 'Sort range',
+    sheetIndex: activeSheetIndex,
+    patch: { cellPatches: patches },
+  });
+  evaluator.setWorkbook(workbook);
+  const { range } = pending;
+  set({
+    workbook: { ...workbook },
+    selection: { ...range },
+    isDirty: true,
+  });
+  updateTitle();
+}
+
 const initialWb = ensureSheetIds(createEmptyWorkbook());
 const initialEvaluator = new Evaluator(initialWb);
 const initialHistory = new HistoryManager(100);
@@ -534,6 +633,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   pendingDeleteSheet: null,
   search: closedSearch,
   scrollToActiveToken: 0,
+  pendingSort: null,
+  notice: null,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -1394,6 +1495,47 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   searchPrev: () => {
     runSearch(get, set, -1, false);
   },
+
+  // --- Phase 4C: เรียงลำดับ ---
+
+  dismissNotice: () => set({ notice: null }),
+
+  requestSort: (dir: SortDirection) => {
+    const pending = prepareSort(get, set, 'quick');
+    if (!pending) return;
+    pending.keys = [{ col: pending.keys[0].col, dir }];
+    set({ pendingSort: pending });
+  },
+
+  openAdvancedSort: () => {
+    const pending = prepareSort(get, set, 'advanced');
+    if (pending) set({ pendingSort: pending });
+  },
+
+  updatePendingSort: (patch) => {
+    const { pendingSort } = get();
+    if (!pendingSort) return;
+    set({ pendingSort: { ...pendingSort, ...patch } });
+  },
+
+  confirmSort: () => {
+    const { pendingSort, workbook, activeSheetIndex } = get();
+    if (!pendingSort) return;
+    const sheet = workbook.sheets[activeSheetIndex];
+
+    if (
+      pendingSort.step === 'options' &&
+      formulasReferenceOtherRows(sheet, pendingSort.range, pendingSort.hasHeader)
+    ) {
+      set({ pendingSort: { ...pendingSort, step: 'formulaWarning' } });
+      return;
+    }
+
+    set({ pendingSort: null });
+    performSort(get, set, pendingSort);
+  },
+
+  cancelSort: () => set({ pendingSort: null }),
 
   getRawValue: (r: number, c: number) => {
     const { workbook, activeSheetIndex } = get();

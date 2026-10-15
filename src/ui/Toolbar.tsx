@@ -45,6 +45,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
     setBorder,
     openFormulaHelper,
     recentFiles,
+    requestSort,
+    openAdvancedSort,
   } = useSheetStore();
 
   const [recentMenuOpen, setRecentMenuOpen] = useState(false);
@@ -53,6 +55,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
   const [textColorOpen, setTextColorOpen] = useState(false);
   const [fillColorOpen, setFillColorOpen] = useState(false);
   const [borderMenuOpen, setBorderMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+
+  const dropdownStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    zIndex: 100,
+    backgroundColor: 'var(--bg-app)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '6px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: '170px',
+    marginTop: '4px',
+    padding: '4px 0',
+  };
+  const dropdownItemStyle: React.CSSProperties = {
+    border: 'none',
+    background: 'transparent',
+    justifyContent: 'flex-start',
+    padding: '6px 12px',
+  };
 
   const activeStyle = getActiveCellStyle();
 
@@ -76,6 +101,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
     setTextColorOpen(false);
     setFillColorOpen(false);
     setBorderMenuOpen(false);
+    setSortMenuOpen(false);
   };
 
   const activeBtnStyle = (isActive?: boolean): React.CSSProperties => ({
@@ -639,6 +665,34 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
       </div>
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+
+      {/* Sort menu (4C) */}
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          onClick={() => {
+            const next = !sortMenuOpen;
+            closeAllMenus();
+            setSortMenuOpen(next);
+          }}
+          title={th.sort.menuTooltip}
+        >
+          ⇅ {th.sort.menu} ▾
+        </button>
+        {sortMenuOpen && (
+          <div style={dropdownStyle}>
+            <button style={dropdownItemStyle} onClick={() => { setSortMenuOpen(false); requestSort('asc'); }}>
+              {th.sort.asc}
+            </button>
+            <button style={dropdownItemStyle} onClick={() => { setSortMenuOpen(false); requestSort('desc'); }}>
+              {th.sort.desc}
+            </button>
+            <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
+            <button style={dropdownItemStyle} onClick={() => { setSortMenuOpen(false); openAdvancedSort(); }}>
+              {th.sort.advanced}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Sigma menu */}
       <div style={{ position: 'relative', display: 'inline-block' }}>

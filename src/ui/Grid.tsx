@@ -82,6 +82,8 @@ export const Grid: React.FC = () => {
     searchNext,
     searchPrev,
     scrollToActiveToken,
+    requestSort,
+    openAdvancedSort,
   } = useSheetStore();
 
   const sheet = workbook.sheets[activeSheetIndex];
@@ -1028,6 +1030,9 @@ export const Grid: React.FC = () => {
           onFreezeRow={() => freezeTo(activeCell.r + 1, sheet.frozenCols)}
           onFreezeCol={() => freezeTo(sheet.frozenRows, activeCell.c + 1)}
           onUnfreeze={() => freezeTo(0, 0)}
+          onSortAsc={() => requestSort('asc')}
+          onSortDesc={() => requestSort('desc')}
+          onSortAdvanced={openAdvancedSort}
         />
       )}
     </div>

@@ -5,6 +5,7 @@ import { Grid } from './Grid';
 import { StatusBar } from './StatusBar';
 import { SheetTabs } from './SheetTabs';
 import { SearchBar } from './SearchBar';
+import { SortDialog } from './SortDialog';
 import {
   ConfirmDialog,
   UnsavedChangesDialog,
@@ -714,6 +715,9 @@ export const App: React.FC = () => {
         onConfirm={confirmPendingDelete}
         onCancel={cancelPendingDelete}
       />
+
+      {/* เรียงลำดับ (4C) */}
+      <SortDialog />
 
       {/* Formula Helper Dialog */}
       <FormulaHelper />

@@ -25,6 +25,9 @@ export interface ContextMenuProps {
   onFreezeRow: () => void;
   onFreezeCol: () => void;
   onUnfreeze: () => void;
+  onSortAsc?: () => void;
+  onSortDesc?: () => void;
+  onSortAdvanced?: () => void;
 }
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
@@ -49,6 +52,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onFreezeRow,
   onFreezeCol,
   onUnfreeze,
+  onSortAsc,
+  onSortDesc,
+  onSortAdvanced,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -241,6 +247,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           {renderItem(th.contextMenu.clearFormat, undefined, onClearFormat)}
           {renderItem(th.contextMenu.merge, undefined, onMerge)}
           {renderItem(th.contextMenu.unmerge, undefined, onUnmerge)}
+          {onSortAsc && onSortDesc && onSortAdvanced && (
+            <>
+              <div style={dividerStyle} />
+              {renderItem(th.sort.asc, undefined, onSortAsc)}
+              {renderItem(th.sort.desc, undefined, onSortDesc)}
+              {renderItem(th.sort.advanced, undefined, onSortAdvanced)}
+            </>
+          )}
           <div style={dividerStyle} />
           {renderItem(th.contextMenu.freezeRow, undefined, onFreezeRow)}
           {renderItem(th.contextMenu.freezeCol, undefined, onFreezeCol)}
