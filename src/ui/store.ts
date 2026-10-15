@@ -35,7 +35,7 @@ import { th } from '../i18n/th';
 import { convertShorthand } from '../core/shorthand';
 import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/address';
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../core/xlsx';
-import { formatDisplayValue } from '../core/numfmt';
+import { formatDisplayValue, convertTypedDate, editTextForCell, todaySerial, formatDate, setDisplayYearMode, YearMode } from '../core/numfmt';
 import { shiftFormula } from '../core/refshift';
 import {
   insertRow as opInsertRow,
@@ -165,6 +165,7 @@ export interface SheetState {
   markSaved: (filePath: string) => void;
   getDisplayValue: (r: number, c: number) => string;
   getRawValue: (r: number, c: number) => string;
+  getEditText: (r: number, c: number) => string; // ข้อความในแถบสูตร/ช่องแก้ไข (วันที่ตามโหมดปี)
   getComputedValue: (r: number, c: number) => CellValue;
   updateTitle: () => void;
 
@@ -279,7 +280,11 @@ export interface SheetState {
   updateCsvImport: (patch: Partial<Pick<PendingCsvImport, 'encoding' | 'delimiter' | 'autoConvert'>>) => void;
   confirmCsvImport: () => void;
   cancelCsvImport: () => void;
-  getCsvExport: () => { bytes: Uint8Array; defaultName: string; hasFilter: boolean };
+  getCsvExport: () => { bytes: Uint8Array; defaultName: string; hasFilter: boolean; hasDates: boolean };
+
+  // Phase 5A: รูปแบบปีที่แสดง (ค่าของแอป เก็บใน userData)
+  yearMode: YearMode;
+  setYearMode: (mode: YearMode, persist?: boolean) => void;
 }
 
 export interface PendingCsvImport {
@@ -819,6 +824,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   notice: null,
   filteredRowsNotice: false,
   pendingCsvImport: null,
+  yearMode: 'ce',
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -869,7 +875,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const { activeCell, workbook, activeSheetIndex } = get();
     const sheet = workbook.sheets[activeSheetIndex];
     const key = cellToA1(activeCell.r, activeCell.c);
-    const existing = sheet.cells[key]?.raw || '';
+    const existing = editTextForCell(sheet.cells[key]?.raw || '', sheet.cells[key]?.fmt);
     const val = initialValue !== undefined ? initialValue : existing;
 
     set({
@@ -910,9 +916,14 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     if (shorthandConverted) {
       finalValue = shorthandConverted;
     }
+    // วันที่ที่พิมพ์ (d/m, d/m/yyyy, dd-mm-yyyy, yyyy-mm-dd; ปี >= 2400 = พ.ศ.) → วันที่จริง (SPEC 5.9 / 5.15)
+    const typedDate = convertTypedDate(finalValue);
+    if (typedDate) {
+      finalValue = typedDate.raw;
+    }
 
     const currentCell = sheet.cells[key];
-    const isSame = (currentCell?.raw || '') === finalValue;
+    const isSame = (currentCell?.raw || '') === finalValue && (!typedDate || currentCell?.fmt === 'date');
 
     if (!isSame) {
       if (finalValue === '') {
@@ -920,7 +931,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       } else {
         sheet.cells[key] = {
           raw: finalValue,
-          fmt: currentCell?.fmt,
+          fmt: typedDate ? 'date' : currentCell?.fmt,
           style: currentCell?.style,
         };
       }
@@ -1037,11 +1048,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   insertCurrentDate: () => {
     const { selection, workbook, activeSheetIndex, evaluator, history, updateTitle, isEditing, editingValue, setEditingValue } = get();
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    const dateStr = `${day}/${month}/${year}`;
+    // ระหว่างแก้ไข: แทรกข้อความวันที่ตามโหมดปี (ยืนยันแล้วจะแปลงเป็นวันที่จริง)
+    const dateStr = formatDate(todaySerial());
 
     if (isEditing) {
       setEditingValue(editingValue + dateStr);
@@ -1059,7 +1067,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         const cell = sheet.cells[key];
         const before = cell ? { ...cell } : undefined;
         const after: Cell = {
-          raw: dateStr,
+          raw: String(todaySerial()), // วันที่จริง (serial ค.ศ.)
           fmt: 'date',
           style: cell?.style ? { ...cell.style } : undefined,
         };
@@ -1908,13 +1916,37 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   cancelCsvImport: () => set({ pendingCsvImport: null }),
 
+  // --- Phase 5A: ปี พ.ศ. ---
+
+  setYearMode: (mode: YearMode, persist = true) => {
+    setDisplayYearMode(mode);
+    // สร้าง object ใหม่ให้ตารางแสดงผลใหม่ทันที (ข้อมูลไม่เปลี่ยน)
+    set({ yearMode: mode, workbook: { ...get().workbook } });
+    if (!persist) return;
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.setPreferences) {
+      electronAPI.setPreferences({ yearMode: mode }).catch(() => {});
+    } else {
+      try {
+        localStorage.setItem('sheeteasy_year_mode', mode);
+      } catch {}
+    }
+  },
+
   getCsvExport: () => {
     const { workbook, activeSheetIndex, evaluator, fileName } = get();
     const sheet = workbook.sheets[activeSheetIndex];
     const text = writeCsv(sheetToCsvRows(sheet, evaluator, activeSheetIndex));
     // ชื่อไฟล์เริ่มต้น = ชื่อไฟล์ปัจจุบัน + ชื่อชีต (ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้)
     const defaultName = `${fileName} - ${sheet.name}.csv`.replace(/[<>:"/\\|?*]/g, '');
-    return { bytes: encodeUtf8WithBom(text), defaultName, hasFilter: !!sheet.filter };
+    const hasDates = Object.values(sheet.cells).some((c) => c.fmt === 'date' && c.raw !== '');
+    return { bytes: encodeUtf8WithBom(text), defaultName, hasFilter: !!sheet.filter, hasDates };
+  },
+
+  getEditText: (r: number, c: number) => {
+    const { workbook, activeSheetIndex } = get();
+    const cell = workbook.sheets[activeSheetIndex]?.cells[cellToA1(r, c)];
+    return cell ? editTextForCell(cell.raw, cell.fmt) : '';
   },
 
   getRawValue: (r: number, c: number) => {
@@ -2144,9 +2176,11 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           for (let j = 0; j < grid[i].length; j++) {
             const destKey = cellToA1(destR, activeCell.c + j);
             const prev = sheet.cells[destKey] ? { ...sheet.cells[destKey] } : undefined;
+            // วันที่จากภายนอก (รวมปี พ.ศ. >= 2400) แปลงเป็นวันที่จริงเหมือนการพิมพ์
+            const pastedDate = convertTypedDate(grid[i][j]);
             sheet.cells[destKey] = {
-              raw: grid[i][j],
-              fmt: prev?.fmt,
+              raw: pastedDate ? pastedDate.raw : grid[i][j],
+              fmt: pastedDate ? 'date' : prev?.fmt,
               style: prev?.style ? { ...prev.style } : undefined,
             };
             evaluator.invalidate(destKey, activeSheetIndex);

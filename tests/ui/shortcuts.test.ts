@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useSheetStore } from '../../src/ui/store';
-import { parseDateString } from '../../src/core/numfmt';
+import { todaySerial } from '../../src/core/numfmt';
 
 describe('Keyboard Shortcuts & Date insertion (SPEC 5.12)', () => {
   beforeEach(() => {
@@ -15,8 +15,9 @@ describe('Keyboard Shortcuts & Date insertion (SPEC 5.12)', () => {
 
     const state = useSheetStore.getState();
     const val = state.getRawValue(1, 2);
-    expect(val).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
-    expect(parseDateString(val)).not.toBeNull();
+    // 5A: Ctrl+; เก็บเป็นวันที่จริง (serial ค.ศ.) และแสดงเป็น dd/mm/yyyy
+    expect(val).toBe(String(todaySerial()));
+    expect(state.getDisplayValue(1, 2)).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
 
     const sheet = state.workbook.sheets[0];
     expect(sheet.cells['C2']?.fmt).toBe('date');
@@ -37,7 +38,7 @@ describe('Keyboard Shortcuts & Date insertion (SPEC 5.12)', () => {
     expect(sheet.cells['A2']?.fmt).toBe('date');
     expect(sheet.cells['A3']?.fmt).toBe('date');
     expect(sheet.cells['B4']?.fmt).toBe('date');
-    expect(sheet.cells['A2']?.raw).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+    expect(sheet.cells['A2']?.raw).toBe(String(todaySerial())); // 5A: วันที่จริง (serial)
   });
 
   it('selectAll selects entire grid from 0,0 to rowCount-1, colCount-1', () => {

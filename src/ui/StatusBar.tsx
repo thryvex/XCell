@@ -2,11 +2,11 @@ import React, { useMemo } from 'react';
 import { th } from '../i18n/th';
 import { useSheetStore, ZOOM_MIN, ZOOM_MAX } from './store';
 import { cellToA1 } from '../core/address';
-import { formatNumberWithCommas } from '../core/numfmt';
+import { formatNumberWithCommas, formatDate } from '../core/numfmt';
 import { filterDataRowCount } from '../core/filter';
 
 export const StatusBar: React.FC = () => {
-  const { selection, getComputedValue, isDirty, workbook, activeSheetIndex, zoomIn, zoomOut, resetZoom } =
+  const { selection, getComputedValue, isDirty, workbook, activeSheetIndex, zoomIn, zoomOut, resetZoom, yearMode } =
     useSheetStore();
   const sheet = workbook.sheets[activeSheetIndex];
   const filter = sheet?.filter;
@@ -29,6 +29,7 @@ export const StatusBar: React.FC = () => {
   const stats = useMemo(() => {
     const numbers: number[] = [];
     let count = 0;
+    let allDates = true; // ตัวเลขทุกเซลเป็นวันที่ → แสดงสถิติเป็นวันที่ (ตามโหมดปี) แทนเลข serial
 
     // รวม/เฉลี่ย/นับ ของช่วงที่เลือก นับเฉพาะแถวที่มองเห็น (แถวที่ตัวกรองซ่อนไม่นับ)
     const hidden = new Set(hiddenRows ?? []);
@@ -40,6 +41,7 @@ export const StatusBar: React.FC = () => {
           count++;
         }
         if (typeof val === 'number' && !isNaN(val) && isFinite(val)) {
+          if (sheet?.cells[cellToA1(r, c)]?.fmt !== 'date') allDates = false;
           numbers.push(val);
         }
       }
@@ -53,15 +55,16 @@ export const StatusBar: React.FC = () => {
     const avg = sum / numbers.length;
     const min = Math.min(...numbers);
     const max = Math.max(...numbers);
+    const fmt = (n: number) => (allDates ? formatDate(Math.round(n)) : formatNumberWithCommas(n, 2));
 
     return {
-      sum: formatNumberWithCommas(sum, 2),
-      avg: formatNumberWithCommas(avg, 2),
+      sum: fmt(sum),
+      avg: fmt(avg),
       count: numbers.length,
-      min: formatNumberWithCommas(min, 2),
-      max: formatNumberWithCommas(max, 2),
+      min: fmt(min),
+      max: fmt(max),
     };
-  }, [selection, getComputedValue, hiddenRows]);
+  }, [selection, getComputedValue, hiddenRows, sheet, yearMode]);
 
   return (
     <div

@@ -61,6 +61,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     toggleFilter,
     workbook,
     activeSheetIndex,
+    yearMode,
+    setYearMode,
   } = useSheetStore();
 
   const [recentMenuOpen, setRecentMenuOpen] = useState(false);
@@ -71,6 +73,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const [borderMenuOpen, setBorderMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
 
   const dropdownStyle: React.CSSProperties = {
     position: 'absolute',
@@ -83,7 +86,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    minWidth: '170px',
+    minWidth: '220px',
     marginTop: '4px',
     padding: '4px 0',
   };
@@ -119,6 +122,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     setBorderMenuOpen(false);
     setSortMenuOpen(false);
     setFileMenuOpen(false);
+    setSettingsMenuOpen(false);
   };
 
   const activeBtnStyle = (isActive?: boolean): React.CSSProperties => ({
@@ -836,8 +840,42 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         )}
       </div>
 
-      {/* Help Button */}
-      <div style={{ marginLeft: 'auto' }}>
+      {/* Help Button + ตั้งค่า (5A) */}
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <button
+            onClick={() => {
+              const next = !settingsMenuOpen;
+              closeAllMenus();
+              setSettingsMenuOpen(next);
+            }}
+            title={th.settings.menuTooltip}
+          >
+            ⚙ {th.settings.menu} ▾
+          </button>
+          {settingsMenuOpen && (
+            <div style={{ ...dropdownStyle, left: 'auto', right: 0 }} role="menu">
+              <div style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--fg-muted)' }}>
+                {th.settings.yearFormat}
+              </div>
+              {(['ce', 'be'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  role="menuitemradio"
+                  aria-checked={yearMode === mode}
+                  style={{ ...dropdownItemStyle, fontWeight: yearMode === mode ? 600 : 400 }}
+                  onClick={() => {
+                    setSettingsMenuOpen(false);
+                    setYearMode(mode);
+                  }}
+                >
+                  {yearMode === mode ? '✓ ' : ' '}
+                  {mode === 'ce' ? th.settings.yearCE : th.settings.yearBE}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button onClick={onOpenHelp} title={th.toolbar.helpTooltip}>
           ❓ {th.toolbar.help}
         </button>

@@ -6,6 +6,7 @@ import { updateRecentFilesList, removeRecentFileItem } from '../src/core/recentF
 import {
   parsePreferences,
   serializePreferences,
+  mergePreferences,
   DEFAULT_PREFERENCES,
   AppPreferences,
 } from '../src/core/preferences';
@@ -183,8 +184,9 @@ ipcMain.handle('prefs:get', async () => {
   return getPreferencesSync();
 });
 
-ipcMain.handle('prefs:set', async (_event, prefs: AppPreferences) => {
-  savePreferencesSync(prefs);
+ipcMain.handle('prefs:set', async (_event, prefs: Partial<AppPreferences>) => {
+  // รวมกับค่าเดิม: บันทึกค่าหนึ่งต้องไม่ลบค่าอื่น (เช่น รูปแบบปี)
+  savePreferencesSync(mergePreferences(getPreferencesSync(), prefs));
   return { success: true };
 });
 

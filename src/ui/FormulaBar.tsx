@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { th } from '../i18n/th';
+import { formatDate, todaySerial } from '../core/numfmt';
 import { useSheetStore } from './store';
 import { cellToA1 } from '../core/address';
 
@@ -12,7 +13,7 @@ export const FormulaBar: React.FC = () => {
     setEditingValue,
     commitEditing,
     cancelEditing,
-    getRawValue,
+    getEditText,
     openFormulaHelper,
     activeSheetIndex,
     editingSheetIndex,
@@ -32,7 +33,7 @@ export const FormulaBar: React.FC = () => {
   }, [isEditingOnOtherSheet, activeSheetIndex]);
 
   const activeA1 = cellToA1(activeCell.r, activeCell.c);
-  const rawValue = getRawValue(activeCell.r, activeCell.c);
+  const rawValue = getEditText(activeCell.r, activeCell.c);
   const displayVal = isEditing ? editingValue : rawValue;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,11 +48,7 @@ export const FormulaBar: React.FC = () => {
     const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && (e.key === ';' || e.code === 'Semicolon')) {
       e.preventDefault();
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      const dateStr = `${day}/${month}/${year}`;
+      const dateStr = formatDate(todaySerial()); // ตามโหมดปี (พ.ศ./ค.ศ.)
 
       const input = e.currentTarget;
       const start = input.selectionStart || 0;

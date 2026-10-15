@@ -80,6 +80,57 @@ export const App: React.FC = () => {
     }, 3500);
   }, []);
 
+  // --- ปี พ.ศ. (5A) ---
+  // โหลดรูปแบบปีจากค่าของแอป (userData) ตอนเริ่ม
+  const hideBeNoticeRef = useRef(false);
+  const beNoticeShownRef = useRef(false);
+  const [beNoticeOpen, setBeNoticeOpen] = useState(false);
+  const [beNoticeDontShow, setBeNoticeDontShow] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+      let mode: string | undefined;
+      try {
+        if (electronAPI?.getPreferences) {
+          const prefs = await electronAPI.getPreferences();
+          mode = prefs?.yearMode;
+          hideBeNoticeRef.current = prefs?.hideBuddhistSaveNotice === true;
+        } else {
+          mode = localStorage.getItem('sheeteasy_year_mode') ?? undefined;
+          hideBeNoticeRef.current = localStorage.getItem('sheeteasy_hide_be_notice') === 'true';
+        }
+      } catch {}
+      if (mode === 'be') useSheetStore.getState().setYearMode('be', false);
+    })();
+  }, []);
+
+  // บันทึกสำเร็จ: ถ้าแสดงปีเป็น พ.ศ. แจ้งครั้งเดียวว่าไฟล์เก็บปีเป็น ค.ศ.
+  const markSavedAndNotify = (path: string) => {
+    markSaved(path);
+    if (
+      useSheetStore.getState().yearMode === 'be' &&
+      !hideBeNoticeRef.current &&
+      !beNoticeShownRef.current
+    ) {
+      beNoticeShownRef.current = true;
+      setBeNoticeDontShow(false);
+      setBeNoticeOpen(true);
+    }
+  };
+  const closeBeNotice = () => {
+    setBeNoticeOpen(false);
+    if (!beNoticeDontShow) return;
+    hideBeNoticeRef.current = true;
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI?.setPreferences) {
+      electronAPI.setPreferences({ hideBuddhistSaveNotice: true }).catch(() => {});
+    } else {
+      try {
+        localStorage.setItem('sheeteasy_hide_be_notice', 'true');
+      } catch {}
+    }
+  };
+
   // เปิดไฟล์จากไบต์: .csv ไปหน้าต่างนำเข้า CSV (งานใหม่), นอกนั้นเปิดเป็น .xlsx
   const openFileBytes = useCallback(
     async (data: Uint8Array, path: string) => {
@@ -118,9 +169,22 @@ export const App: React.FC = () => {
       showToast(th.csv.exportFailed + (err.message || String(err)));
     }
   };
+  const [csvConfirmMessage, setCsvConfirmMessage] = useState('');
   const handleExportCsv = () => {
-    if (getCsvExport().hasFilter) setCsvFilterConfirmOpen(true);
-    else runCsvExport();
+    const { hasFilter, hasDates } = getCsvExport();
+    if (!hasFilter && !hasDates) {
+      runCsvExport();
+      return;
+    }
+    // บอกก่อนส่งออก: แถวที่ซ่อนด้วยตัวกรองถูกส่งออกด้วย และปีของวันที่เป็น พ.ศ. หรือ ค.ศ. ตามที่แสดง
+    const lines: string[] = [];
+    if (hasFilter) lines.push(th.csv.exportFilterConfirm);
+    if (hasDates) {
+      const mode = useSheetStore.getState().yearMode === 'be' ? th.csv.yearBE : th.csv.yearCE;
+      lines.push(th.csv.exportYear.replace('{mode}', mode));
+    }
+    setCsvConfirmMessage(lines.join(' '));
+    setCsvFilterConfirmOpen(true);
   };
 
   // นำเข้า CSV เป็นชีตใหม่ในไฟล์ที่เปิดอยู่
@@ -269,7 +333,7 @@ export const App: React.FC = () => {
       if (electronAPI) {
         const writeRes = await electronAPI.writeFile(targetPath, Array.from(buffer));
         if (writeRes.success) {
-          markSaved(targetPath);
+          markSavedAndNotify(targetPath);
           showToast(th.messages.fileSaved);
           return true;
         } else {
@@ -277,7 +341,7 @@ export const App: React.FC = () => {
           return false;
         }
       } else {
-        markSaved(targetPath);
+        markSavedAndNotify(targetPath);
         showToast(th.messages.fileSaved);
         return true;
       }
@@ -302,7 +366,7 @@ export const App: React.FC = () => {
             Array.from(buffer)
           );
           if (writeRes.success) {
-            markSaved(saveDialogRes.filePath);
+            markSavedAndNotify(saveDialogRes.filePath);
             showToast(th.messages.fileSaved);
             return true;
           } else {
@@ -322,7 +386,7 @@ export const App: React.FC = () => {
         a.download = 'ตารางรายรับรายจ่าย.xlsx';
         a.click();
         URL.revokeObjectURL(url);
-        markSaved('ตารางรายรับรายจ่าย.xlsx');
+        markSavedAndNotify('ตารางรายรับรายจ่าย.xlsx');
         showToast(th.messages.fileSaved);
         return true;
       }
@@ -841,13 +905,60 @@ export const App: React.FC = () => {
       {/* เรียงลำดับ (4C) */}
       <SortDialog />
 
+      {/* แจ้งเรื่องปี พ.ศ. หลังบันทึก (5A) */}
+      {beNoticeOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3000,
+          }}
+        >
+          <div
+            role="alertdialog"
+            style={{
+              backgroundColor: 'var(--bg-app)',
+              borderRadius: '8px',
+              padding: '20px 24px',
+              width: '420px',
+              maxWidth: '92%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              fontSize: '14px',
+              boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: '16px' }}>ℹ️ {th.yearNotice.title}</h3>
+            <p style={{ margin: 0 }}>{th.yearNotice.message}</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={beNoticeDontShow}
+                onChange={(e) => setBeNoticeDontShow(e.target.checked)}
+              />
+              {th.yearNotice.dontShowAgain}
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button autoFocus onClick={closeBeNotice} style={{ fontWeight: 600 }}>
+                {th.dialog.ok}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* นำเข้า CSV (4D) */}
       <CsvImportDialog />
 
       {/* ส่งออก CSV ขณะมีตัวกรอง: บอกก่อนว่าจะส่งออกทุกแถว */}
       <ConfirmDialog
         isOpen={csvFilterConfirmOpen}
-        message={th.csv.exportFilterConfirm}
+        message={csvConfirmMessage}
         confirmText={th.csv.exportContinue}
         cancelText={th.dialog.cancel}
         onConfirm={() => {

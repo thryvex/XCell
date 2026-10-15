@@ -8,6 +8,7 @@ import { tokenize } from '../core/tokenizer';
 import { sameSheetName, formatSheetReference } from '../core/sheetName';
 import { MergeRange } from '../core/model';
 import { th } from '../i18n/th';
+import { formatDate, todaySerial } from '../core/numfmt';
 
 const DEFAULT_COL_WIDTH = 110;
 const DEFAULT_ROW_HEIGHT = 28;
@@ -791,11 +792,7 @@ export const Grid: React.FC = () => {
               const isCtrl = e.ctrlKey || e.metaKey;
               if (isCtrl && (e.key === ';' || e.code === 'Semicolon')) {
                 e.preventDefault();
-                const now = new Date();
-                const day = String(now.getDate()).padStart(2, '0');
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const year = now.getFullYear();
-                const dateStr = `${day}/${month}/${year}`;
+                const dateStr = formatDate(todaySerial()); // ตามโหมดปี (พ.ศ./ค.ศ.)
 
                 const input = inputRef.current;
                 if (input) {

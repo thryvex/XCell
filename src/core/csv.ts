@@ -1,7 +1,7 @@
 import { Sheet, Cell, NumFmt, CellValue, createEmptySheet } from './model';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseA1 } from './address';
-import { formatDisplayValue, dateToSerial } from './numfmt';
+import { formatDisplayValue, validDateSerial, toGregorianYear } from './numfmt';
 import { isCellError } from './functions';
 import { FORBIDDEN_SHEET_NAME_CHARS } from './sheetName';
 
@@ -219,13 +219,6 @@ function mustStayText(text: string): boolean {
   return digitCount(text) > 15;
 }
 
-function validDate(y: number, m: number, d: number): number | null {
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  const date = new Date(y, m - 1, d);
-  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
-  return dateToSerial(date);
-}
-
 /** ข้อความที่ต้องเก็บเป็นข้อความล้วน: ใส่ ' นำหน้า (ไม่แสดง) กันการตีความเป็นสูตร/ตัวเลข */
 function asText(text: string): Cell {
   return { raw: `'${text}` };
@@ -265,12 +258,13 @@ export function convertCsvValue(text: string, autoConvert: boolean): Cell | null
 
   const dmy = DMY_RE.exec(t);
   if (dmy) {
-    const serial = validDate(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
+    // ปี >= 2400 เป็น พ.ศ. (กติกาเดียวกับการพิมพ์เข้า)
+    const serial = validDateSerial(toGregorianYear(Number(dmy[3])), Number(dmy[2]), Number(dmy[1]));
     if (serial !== null) return { raw: String(serial), fmt: 'date' };
   }
   const ymd = YMD_RE.exec(t);
   if (ymd) {
-    const serial = validDate(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
+    const serial = validDateSerial(toGregorianYear(Number(ymd[1])), Number(ymd[2]), Number(ymd[3]));
     if (serial !== null) return { raw: String(serial), fmt: 'date' };
   }
 

@@ -179,6 +179,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
                 <div>{th.help.gsStep1}</div>
                 <div>{th.help.gsStep2}</div>
                 <div>{th.help.gsStep3}</div>
+                <div style={{ marginTop: '8px', color: 'var(--fg-muted)' }}>{th.help.gsYearNote}</div>
               </div>
               <div
                 style={{
