@@ -7,7 +7,8 @@ describe('Templates (Phase 3D)', () => {
   describe('Ledger Template (รายรับรายจ่าย)', () => {
     it('creates ledger workbook with correct structure and styling', () => {
       const wb = createLedgerWorkbook();
-      expect(wb.sheets.length).toBe(1);
+      // 4D: เทมเพลตมี 2 ชีต "บันทึก" + "สรุป"
+      expect(wb.sheets.map((s) => s.name)).toEqual(['บันทึก', 'สรุป']);
       const sheet = wb.sheets[0];
       expect(sheet.name).toBe('บันทึก');
       expect(sheet.frozenRows).toBe(1);

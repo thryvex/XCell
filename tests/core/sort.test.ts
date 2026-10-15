@@ -216,3 +216,15 @@ describe('เรียงลำดับใน store', () => {
     expect(S().notice).toBe(th.sort.mergedError);
   });
 });
+
+describe('วันที่ที่พิมพ์เป็นข้อความ', () => {
+  it('date-formatted text dates sort by date, not alphabetically', () => {
+    const sheet = createEmptySheet('ชีต1');
+    ['5/10/2026', '20/1/2026', '1/12/2025'].forEach((d, i) => {
+      sheet.cells[`A${i + 1}`] = { raw: d, fmt: 'date' };
+    });
+    const wb: Workbook = { sheets: [sheet], activeSheet: 0 };
+    sortRange(sheet, new Evaluator(wb), 0, { r1: 0, c1: 0, r2: 2, c2: 0 }, [{ col: 0, dir: 'asc' }], false);
+    expect(column(sheet, 'A', 1, 3)).toEqual(['1/12/2025', '20/1/2026', '5/10/2026']);
+  });
+});

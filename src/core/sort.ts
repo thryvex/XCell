@@ -1,4 +1,5 @@
-import { Sheet, Cell, CellValue } from './model';
+import { Sheet, Cell, CellValue, NumFmt } from './model';
+import { parseDateString } from './numfmt';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseRange } from './address';
 import { shiftFormula } from './refshift';
@@ -192,7 +193,10 @@ export function sortRange(
   for (let r = dataR1; r <= range.r2; r++) {
     rows.push({
       row: r,
-      values: keys.map((k) => evaluator.getCellValue(cellToA1(r, k.col), sheetIndex)),
+      values: keys.map((k) => {
+        const key = cellToA1(r, k.col);
+        return sortableValue(evaluator.getCellValue(key, sheetIndex), sheet.cells[key]?.fmt);
+      }),
     });
   }
 
@@ -246,4 +250,16 @@ export function rangeLabel(range: CellRange): string {
   const a = cellToA1(range.r1, range.c1);
   const b = cellToA1(range.r2, range.c2);
   return a === b ? a : `${a}:${b}`;
+}
+
+/**
+ * วันที่ที่ผู้ใช้พิมพ์ (เช่น "5/10/2026") ยังเก็บเป็นข้อความ: ถ้าเซลจัดรูปแบบเป็นวันที่
+ * ให้เรียง/กรองตามค่าวันที่ (serial) แทนการเรียงแบบข้อความ
+ */
+export function sortableValue(value: CellValue, fmt: NumFmt | undefined): CellValue {
+  if (typeof value === 'string' && fmt === 'date') {
+    const serial = parseDateString(value);
+    if (serial !== null) return serial;
+  }
+  return value;
 }

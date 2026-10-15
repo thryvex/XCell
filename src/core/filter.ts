@@ -2,7 +2,7 @@ import { Sheet, SheetFilter, ColumnFilter, FilterCondition, CellValue } from './
 import { Evaluator } from './evaluator';
 import { cellToA1 } from './address';
 import { formatDisplayValue, parseDateString } from './numfmt';
-import { CellRange } from './sort';
+import { CellRange, sortableValue } from './sort';
 
 export function createFilter(range: CellRange): SheetFilter {
   return { r1: range.r1, c1: range.c1, r2: range.r2, c2: range.c2, columns: {} };
@@ -74,7 +74,8 @@ export function columnPasses(cf: ColumnFilter, value: CellValue, display: string
 function cellInfo(sheet: Sheet, evaluator: Evaluator, sheetIndex: number, r: number, c: number) {
   const key = cellToA1(r, c);
   const value = evaluator.getCellValue(key, sheetIndex);
-  return { value, display: formatDisplayValue(value, sheet.cells[key]?.fmt) };
+  const fmt = sheet.cells[key]?.fmt;
+  return { value: sortableValue(value, fmt), display: formatDisplayValue(value, fmt) };
 }
 
 /** คำนวณแถวที่ต้องซ่อนจากตัวกรองของชีต (ทุกคอลัมน์ต้องผ่านแบบ "และ") */
