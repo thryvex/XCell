@@ -17,29 +17,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
 
   if (!isOpen) return null;
 
-  const SHORTCUTS = [
-    { key: 'Ctrl+N', desc: 'สร้างตารางใหม่' },
-    { key: 'Ctrl+O', desc: 'เปิดไฟล์ตารางคำนวณ (.xlsx, .csv)' },
-    { key: 'Ctrl+S', desc: 'บันทึกไฟล์' },
-    { key: 'Ctrl+Shift+S', desc: 'บันทึกเป็นไฟล์ใหม่' },
-    { key: 'Ctrl+Z', desc: 'ย้อนกลับการกระทำล่าสุด (Undo)' },
-    { key: 'Ctrl+Y / Ctrl+Shift+Z', desc: 'ทำซ้ำการกระทำที่ยกเลิก (Redo)' },
-    { key: 'Ctrl+C', desc: 'คัดลอกช่วงเซลที่เลือก' },
-    { key: 'Ctrl+X', desc: 'ตัดช่วงเซลที่เลือก' },
-    { key: 'Ctrl+V', desc: 'วาง' },
-    { key: 'Ctrl+Shift+V', desc: 'วางเฉพาะค่า (ไม่ทับสไตล์เดิม)' },
-    { key: 'Ctrl+D', desc: 'เติมสูตร/ค่าลงด้านล่าง (Fill Down)' },
-    { key: 'Ctrl+R', desc: 'เติมสูตร/ค่าไปทางขวา (Fill Right)' },
-    { key: 'Ctrl+B', desc: 'ตัวหนา (เปิด/ปิด)' },
-    { key: 'Ctrl+I', desc: 'ตัวเอียง (เปิด/ปิด)' },
-    { key: 'Ctrl+U', desc: 'ขีดเส้นใต้ (เปิด/ปิด)' },
-    { key: 'Ctrl+A', desc: 'เลือกเซลทั้งหมดในตาราง' },
-    { key: 'F2', desc: 'เข้าสู่โหมดแก้ไขเซลที่เลือก' },
-    { key: 'F4', desc: 'สลับรูปแบบการตรึงตำแหน่ง ($A$1 ➔ A$1 ➔ $A1 ➔ A1)' },
-    { key: 'Esc', desc: 'ยกเลิกการแก้ไขเซล หรือปิดเมนู' },
-    { key: 'Delete / Backspace', desc: 'ล้างเนื้อหาของเซลที่เลือก' },
-    { key: 'Ctrl+;', desc: 'ใส่วันที่ปัจจุบันลงในเซล' },
-  ];
+  const SHORTCUTS = th.help.shortcuts;
 
   return (
     <div

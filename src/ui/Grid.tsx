@@ -77,6 +77,11 @@ export const Grid: React.FC = () => {
     getDisplayValue,
     getRawValue,
     getComputedValue,
+    search,
+    openSearch,
+    searchNext,
+    searchPrev,
+    scrollToActiveToken,
   } = useSheetStore();
 
   const sheet = workbook.sheets[activeSheetIndex];
@@ -89,6 +94,44 @@ export const Grid: React.FC = () => {
   // แสดงกรอบ "ตัด" เฉพาะบนชีตต้นทาง
   const visibleCutRange =
     cutRange && (!clipboard?.sourceSheetId || clipboard.sourceSheetId === sheetId) ? cutRange : null;
+
+  // ผลค้นหาบนชีตนี้: ทุกผล (สีอ่อน) และผลปัจจุบัน (สีเด่น)
+  const searchCells = useMemo(() => {
+    const map = new Map<string, 'match' | 'current'>();
+    if (!search.isOpen) return map;
+    search.matches.forEach((m, i) => {
+      if (m.sheetIndex !== activeSheetIndex) return;
+      map.set(cellToA1(m.r, m.c), i === search.current ? 'current' : 'match');
+    });
+    return map;
+  }, [search.isOpen, search.matches, search.current, activeSheetIndex]);
+
+  // เลื่อนตารางให้เห็นเซลที่เลือก (เมื่อไปยังผลค้นหา)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || scrollToActiveToken === 0) return;
+    const hidden = new Set(sheet.hiddenRows ?? []);
+    let top = HEADER_ROW_HEIGHT;
+    for (let r = 0; r < activeCell.r; r++) {
+      if (!hidden.has(r)) top += sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
+    }
+    let left = HEADER_COL_WIDTH;
+    for (let c = 0; c < activeCell.c; c++) {
+      left += sheet.colWidths[c] || DEFAULT_COL_WIDTH;
+    }
+    const zoom = (sheet.zoom ?? 100) / 100;
+    const height = (sheet.rowHeights[activeCell.r] || DEFAULT_ROW_HEIGHT) * zoom;
+    const width = (sheet.colWidths[activeCell.c] || DEFAULT_COL_WIDTH) * zoom;
+    top *= zoom;
+    left *= zoom;
+    if (top < el.scrollTop + HEADER_ROW_HEIGHT * zoom || top + height > el.scrollTop + el.clientHeight) {
+      el.scrollTop = Math.max(0, top - el.clientHeight / 2);
+    }
+    if (left < el.scrollLeft + HEADER_COL_WIDTH * zoom || left + width > el.scrollLeft + el.clientWidth) {
+      el.scrollLeft = Math.max(0, left - el.clientWidth / 2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToActiveToken]);
 
   // คืนตำแหน่งเลื่อนของชีตเมื่อสลับชีต (สถานะแยกต่อชีต)
   useLayoutEffect(() => {
@@ -190,6 +233,20 @@ export const Grid: React.FC = () => {
   // Global keyboard shortcuts in grid
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+F เปิดแถบค้นหา, F3 / Shift+F3 ผลถัดไป/ก่อนหน้า
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        openSearch();
+        return;
+      }
+      if (e.key === 'F3' && !isEditing) {
+        e.preventDefault();
+        if (!search.isOpen) openSearch();
+        else if (e.shiftKey) searchPrev();
+        else searchNext();
+        return;
+      }
+
       // F4 key works both inside editor and grid
       if (e.key === 'F4') {
         e.preventDefault();
@@ -348,6 +405,10 @@ export const Grid: React.FC = () => {
     toggleItalic,
     toggleUnderline,
     nextSheet,
+    search.isOpen,
+    openSearch,
+    searchNext,
+    searchPrev,
     prevSheet,
   ]);
 
@@ -875,6 +936,7 @@ export const Grid: React.FC = () => {
                         isCut={isCut}
                         isUnsupportedFormula={Boolean(cellData?.unsupportedFormula)}
                         highlightColor={highlightColor}
+                        searchHighlight={searchCells.get(a1)}
                         style={cellData?.style}
                         rowSpan={merge ? merge.r2 - merge.r1 + 1 : undefined}
                         colSpan={merge ? merge.c2 - merge.c1 + 1 : undefined}

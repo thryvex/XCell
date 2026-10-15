@@ -4,6 +4,7 @@ import { FormulaBar } from './FormulaBar';
 import { Grid } from './Grid';
 import { StatusBar } from './StatusBar';
 import { SheetTabs } from './SheetTabs';
+import { SearchBar } from './SearchBar';
 import {
   ConfirmDialog,
   UnsavedChangesDialog,
@@ -619,7 +620,11 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      <Grid />
+      {/* พื้นที่ตาราง + แถบค้นหามุมขวาบน */}
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Grid />
+        <SearchBar />
+      </div>
       <SheetTabs />
       <StatusBar />
 

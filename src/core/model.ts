@@ -45,6 +45,38 @@ export type Sheet = {
   rowHeights: Record<number, number>; // 0-based row index -> height in px
   frozenRows: number;
   frozenCols: number;
+  filter?: SheetFilter; // ตัวกรอง (4C)
+  hiddenRows?: number[]; // แถวที่ซ่อนจากตัวกรอง (0-based, เรียงจากน้อยไปมาก)
+  zoom?: number; // ระดับซูมเป็นเปอร์เซ็นต์ (ไม่มี = 100)
+};
+
+/** เงื่อนไขกรองแบบ "กรองตามเงื่อนไข" */
+export type FilterCondition =
+  | { type: 'empty' }
+  | { type: 'notEmpty' }
+  | { type: 'textContains'; value: string }
+  | { type: 'textNotContains'; value: string }
+  | { type: 'startsWith'; value: string }
+  | { type: 'equals'; value: string }
+  | { type: 'greaterThan'; value: string }
+  | { type: 'lessThan'; value: string }
+  | { type: 'between'; min: string; max: string };
+
+/** ตัวกรองของคอลัมน์หนึ่ง: กรองตามค่า (ค่าที่ซ่อน) หรือกรองตามเงื่อนไข อย่างใดอย่างหนึ่ง */
+export type ColumnFilter =
+  | { kind: 'values'; hiddenValues: string[] }
+  | { kind: 'condition'; condition: FilterCondition };
+
+/**
+ * ตัวกรองของชีต: r1 คือแถวหัวตาราง, ข้อมูลคือแถว r1+1..r2
+ * columns: key = index คอลัมน์จริง (0-based)
+ */
+export type SheetFilter = {
+  r1: number;
+  c1: number;
+  r2: number;
+  c2: number;
+  columns: Record<number, ColumnFilter>;
 };
 
 export type Workbook = {

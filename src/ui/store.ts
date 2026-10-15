@@ -41,6 +41,13 @@ import {
 import { rangeToTsv, rangeToHtml, parseTsv } from '../core/clipboard';
 import { computeFill, fillDown as opFillDown, fillRight as opFillRight } from '../core/fill';
 import { detectSigmaRange } from '../core/sigma';
+import {
+  findMatches,
+  nextMatchIndex,
+  SearchMatch,
+  SearchOptions,
+  DEFAULT_SEARCH_OPTIONS,
+} from '../core/search';
 
 export interface SelectionState {
   r1: number;
@@ -192,7 +199,33 @@ export interface SheetState {
   moveSheet: (from: number, to: number) => void;
   rememberScroll: (scrollTop: number, scrollLeft: number) => void;
   getActiveSheetView: () => SheetView;
+
+  // Phase 4C: ค้นหา (ไม่บันทึกลงไฟล์ ไม่อยู่ใน Undo)
+  search: SearchState;
+  scrollToActiveToken: number; // เพิ่มค่าเมื่อต้องเลื่อนตารางให้เห็นเซลที่เลือก (เช่น ไปยังผลค้นหา)
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSearchQuery: (query: string) => void;
+  setSearchOption: (key: keyof SearchOptions, value: boolean) => void;
+  searchNext: () => void;
+  searchPrev: () => void;
 }
+
+export interface SearchState {
+  isOpen: boolean;
+  query: string;
+  options: SearchOptions;
+  matches: SearchMatch[];
+  current: number; // index ใน matches หรือ -1
+}
+
+const closedSearch: SearchState = {
+  isOpen: false,
+  query: '',
+  options: { ...DEFAULT_SEARCH_OPTIONS },
+  matches: [],
+  current: -1,
+};
 
 const DEFAULT_ROW_COUNT = 100;
 const DEFAULT_COL_COUNT = 26;
@@ -231,6 +264,7 @@ function freshWorkbookState(wb: Workbook, activeCell = { r: 0, c: 0 }) {
     cutRange: null,
     pendingDelete: null,
     pendingDeleteSheet: null,
+    search: closedSearch,
   };
 }
 
@@ -438,6 +472,35 @@ function applyRowColOp(
   updateTitle();
 }
 
+/**
+ * ค้นหาใหม่แล้วไปยังผลถัดไป/ก่อนหน้าจากเซลปัจจุบัน (สลับชีตได้เมื่อค้นทุกชีต)
+ * inclusive = true ใช้ตอนพิมพ์คำค้น/เปลี่ยนตัวเลือก (เซลปัจจุบันนับเป็นผลแรกได้)
+ */
+function runSearch(get: StoreGet, set: StoreSet, direction: 1 | -1, inclusive: boolean) {
+  const { search, workbook, evaluator, activeSheetIndex, activeCell } = get();
+  const matches = findMatches(workbook, evaluator, search.query, search.options, activeSheetIndex);
+  if (matches.length === 0) {
+    set({ search: { ...search, matches, current: -1 } });
+    return;
+  }
+
+  const from = { sheetIndex: activeSheetIndex, r: activeCell.r, c: activeCell.c };
+  const idx = nextMatchIndex(matches, from, direction, inclusive);
+  const m = matches[idx];
+  if (m.sheetIndex !== activeSheetIndex) {
+    get().switchSheet(m.sheetIndex);
+  }
+  const { rowCount, colCount } = get();
+  if (m.r >= rowCount || m.c >= colCount) {
+    set({ rowCount: Math.max(rowCount, m.r + 1), colCount: Math.max(colCount, m.c + 1) });
+  }
+  get().setActiveCell(m.r, m.c);
+  set({
+    search: { ...get().search, matches, current: idx },
+    scrollToActiveToken: get().scrollToActiveToken + 1,
+  });
+}
+
 const initialWb = ensureSheetIds(createEmptyWorkbook());
 const initialEvaluator = new Evaluator(initialWb);
 const initialHistory = new HistoryManager(100);
@@ -469,6 +532,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   hasWarnedUnsupportedOverwrite: false,
   sheetViews: { [initialWb.sheets[0].id!]: defaultSheetView() },
   pendingDeleteSheet: null,
+  search: closedSearch,
+  scrollToActiveToken: 0,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -1295,6 +1360,39 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       affectedBefore: from,
       show: 'keep',
     });
+  },
+
+  // --- Phase 4C: ค้นหา ---
+
+  openSearch: () => {
+    const { search, isEditing, commitEditing } = get();
+    if (isEditing) commitEditing(0, 0);
+    set({ search: { ...search, isOpen: true } });
+  },
+
+  closeSearch: () => {
+    // เซลที่ค้นพบล่าสุดยังถูกเลือกค้างไว้ (activeCell ไม่เปลี่ยน)
+    set({ search: { ...closedSearch, options: get().search.options } });
+  },
+
+  setSearchQuery: (query: string) => {
+    const { search } = get();
+    set({ search: { ...search, query } });
+    runSearch(get, set, 1, true);
+  },
+
+  setSearchOption: (key: keyof SearchOptions, value: boolean) => {
+    const { search } = get();
+    set({ search: { ...search, options: { ...search.options, [key]: value } } });
+    runSearch(get, set, 1, true);
+  },
+
+  searchNext: () => {
+    runSearch(get, set, 1, false);
+  },
+
+  searchPrev: () => {
+    runSearch(get, set, -1, false);
   },
 
   getRawValue: (r: number, c: number) => {

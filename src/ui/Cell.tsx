@@ -14,6 +14,7 @@ interface CellProps {
   isCut?: boolean;
   isUnsupportedFormula?: boolean;
   highlightColor?: string;
+  searchHighlight?: 'match' | 'current'; // ผลค้นหา (4C)
   style?: CellStyle;
   rowSpan?: number;
   colSpan?: number;
@@ -33,6 +34,7 @@ export const Cell: React.FC<CellProps> = ({
   isCut,
   isUnsupportedFormula,
   highlightColor,
+  searchHighlight,
   style,
   rowSpan,
   colSpan,
@@ -62,6 +64,10 @@ export const Cell: React.FC<CellProps> = ({
   let bgColor = style?.fill || 'transparent';
   if (highlightColor) {
     bgColor = `${highlightColor}18`; // light tint
+  } else if (searchHighlight === 'current') {
+    bgColor = '#fdba74'; // ผลค้นหาปัจจุบัน (สีเด่น)
+  } else if (searchHighlight === 'match') {
+    bgColor = '#fef08a'; // ผลค้นหาอื่น (สีอ่อน)
   } else if (isActive) {
     bgColor = 'var(--bg-active)';
   } else if (isSelected) {
