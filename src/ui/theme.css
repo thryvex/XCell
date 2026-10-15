@@ -1,0 +1,249 @@
+/*
+ * Design tokens ของ SheetEasy (Phase 5C)
+ * สีทั้งหมดของ UI อยู่ที่ไฟล์นี้ที่เดียว คอมโพเนนต์ใช้ผ่าน var(--...) เท่านั้น
+ * ชุดสว่างเป็นค่าเริ่มต้นของ :root, ชุดมืดใช้เมื่อ <html data-theme="dark">
+ * พื้นตาราง "ขาวเสมอ" เปลี่ยนเฉพาะ token ของพื้นที่ตาราง (--grid-*, --ref-*, --search-*)
+ * ค่าที่ผ่านเทสต์ contrast: ข้อความ >= 4.5:1, เส้นขอบ/ส่วนประกอบที่ต้องมองเห็น >= 3:1
+ */
+
+/* ---------- ธีมสว่าง ---------- */
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+
+  /* พื้นหลังและพื้นผิว */
+  --bg-app: #ffffff;
+  --bg-surface: #f8fafc;
+  --bg-header: #f1f3f5;
+  --bg-hover: #e9edf2;
+  --bg-toolbar: #f8fafc;
+  --bg-selection: #dbeafe;
+  --bg-active: #ffffff;
+  --dialog-bg: #ffffff;
+  --menu-bg: #ffffff;
+  --menu-hover: #e9edf2;
+  --paper-bg: #ffffff;
+
+  /* ตัวอักษร */
+  --fg-main: #1f2328;
+  --fg-primary: #1f2328;
+  --fg-muted: #535d6b;
+  --fg-on-primary: #ffffff;
+
+  /* เส้นขอบ: border-color = เส้นแบ่งตกแต่ง, control-border = ขอบ input/ปุ่มที่ต้องมองเห็น */
+  --border-color: #d1d5db;
+  --control-border: #7b8494;
+
+  /* สีหลักและสถานะ */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-success: #15803d;
+  --color-danger: #b91c1c;
+  --color-warning: #b45309;
+  --danger-bg: #fef2f2;
+
+  /* แถบเตือน */
+  --banner-warn-bg: #fef3c7;
+  --banner-warn-fg: #92400e;
+  --banner-warn-border: #b45309;
+  --banner-info-bg: #e0f2fe;
+  --banner-info-fg: #075985;
+  --banner-info-border: #0284c7;
+
+  /* แท็บชีตและแถบสถานะ */
+  --tab-bar-bg: #f8fafc;
+  --tab-fg: #535d6b;
+  --tab-active-bg: #ffffff;
+  --tab-active-fg: #1d4ed8;
+  --status-bg: #f8fafc;
+  --status-fg: #535d6b;
+
+  /* tooltip, toast */
+  --tooltip-bg: #1f2328;
+  --tooltip-fg: #ffffff;
+  --toast-bg: #2563eb;
+  --toast-fg: #ffffff;
+
+  /* scrollbar */
+  --scrollbar-track: #f1f3f5;
+  --scrollbar-thumb: #b6bec9;
+  --scrollbar-thumb-hover: #7b8494;
+
+  /* เงาและพื้นมืดหลังหน้าต่าง */
+  --overlay: rgba(15, 23, 42, 0.45);
+  --drop-overlay: rgba(37, 99, 235, 0.15);
+  --shadow-menu: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-dialog: 0 10px 30px rgba(0, 0, 0, 0.25);
+  --shadow-paper: 0 2px 10px rgba(0, 0, 0, 0.25);
+  --hover-tint: rgba(0, 0, 0, 0.06);
+
+  /* พื้นที่ตาราง */
+  --grid-bg: #ffffff;
+  --grid-fg: #1f2328;
+  --grid-line: #e2e8f0;
+  --grid-header-bg: #f1f3f5;
+  --grid-header-fg: #535d6b;
+  --grid-selection: #dbeafe;
+  --grid-active-bg: #ffffff;
+  --grid-active-border: #2563eb;
+  --grid-error: #b91c1c;
+  --grid-unsupported: #b45309;
+  --fill-handle: #2563eb;
+  --fill-handle-border: #ffffff;
+
+  /* สี reference ตอนแก้สูตร (เส้น) และพื้นอ่อน */
+  --ref-1: #2563eb;
+  --ref-2: #dc2626;
+  --ref-3: #15803d;
+  --ref-4: #9333ea;
+  --ref-5: #854d0e;
+  --ref-6: #0e7490;
+  --ref-1-bg: rgba(37, 99, 235, 0.1);
+  --ref-2-bg: rgba(220, 38, 38, 0.1);
+  --ref-3-bg: rgba(21, 128, 61, 0.1);
+  --ref-4-bg: rgba(147, 51, 234, 0.1);
+  --ref-5-bg: rgba(133, 77, 14, 0.1);
+  --ref-6-bg: rgba(14, 116, 144, 0.1);
+
+  /* ผลค้นหา */
+  --search-match-bg: #fef08a;
+  --search-current-bg: #fdba74;
+  --search-fg: #1f2328;
+}
+
+/* ---------- ธีมมืด ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-app: #121417;
+  --bg-surface: #1a1d24;
+  --bg-header: #232730;
+  --bg-hover: #2a2f3a;
+  --bg-toolbar: #1a1d24;
+  --bg-selection: #1e3a5f;
+  --bg-active: #1a1d24;
+  --dialog-bg: #1a1d24;
+  --menu-bg: #1f232b;
+  --menu-hover: #2a2f3a;
+  --paper-bg: #ffffff;
+
+  --fg-main: #e2e8f0;
+  --fg-primary: #e2e8f0;
+  --fg-muted: #a3afc2;
+  --fg-on-primary: #0b1220;
+
+  --border-color: #334155;
+  --control-border: #6b7a90;
+
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-success: #4ade80;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
+  --danger-bg: #3f1d1d;
+
+  --banner-warn-bg: #3b2f0b;
+  --banner-warn-fg: #fcd34d;
+  --banner-warn-border: #d97706;
+  --banner-info-bg: #082f49;
+  --banner-info-fg: #7dd3fc;
+  --banner-info-border: #0284c7;
+
+  --tab-bar-bg: #1a1d24;
+  --tab-fg: #a3afc2;
+  --tab-active-bg: #121417;
+  --tab-active-fg: #93c5fd;
+  --status-bg: #1a1d24;
+  --status-fg: #a3afc2;
+
+  --tooltip-bg: #e2e8f0;
+  --tooltip-fg: #121417;
+  --toast-bg: #60a5fa;
+  --toast-fg: #0b1220;
+
+  --scrollbar-track: #1a1d24;
+  --scrollbar-thumb: #3b4454;
+  --scrollbar-thumb-hover: #6b7a90;
+
+  --overlay: rgba(0, 0, 0, 0.6);
+  --drop-overlay: rgba(96, 165, 250, 0.18);
+  --shadow-menu: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-dialog: 0 10px 30px rgba(0, 0, 0, 0.6);
+  --shadow-paper: 0 2px 10px rgba(0, 0, 0, 0.6);
+  --hover-tint: rgba(255, 255, 255, 0.08);
+
+  --grid-bg: #121417;
+  --grid-fg: #e2e8f0;
+  --grid-line: #28303e;
+  --grid-header-bg: #1a1d24;
+  --grid-header-fg: #a3afc2;
+  --grid-selection: #1e3a5f;
+  --grid-active-bg: #1a1d24;
+  --grid-active-border: #60a5fa;
+  --grid-error: #f87171;
+  --grid-unsupported: #fbbf24;
+  --fill-handle: #60a5fa;
+  --fill-handle-border: #121417;
+
+  --ref-1: #60a5fa;
+  --ref-2: #f87171;
+  --ref-3: #4ade80;
+  --ref-4: #c084fc;
+  --ref-5: #facc15;
+  --ref-6: #22d3ee;
+  --ref-1-bg: rgba(96, 165, 250, 0.16);
+  --ref-2-bg: rgba(248, 113, 113, 0.16);
+  --ref-3-bg: rgba(74, 222, 128, 0.16);
+  --ref-4-bg: rgba(192, 132, 252, 0.16);
+  --ref-5-bg: rgba(250, 204, 21, 0.16);
+  --ref-6-bg: rgba(34, 211, 238, 0.16);
+
+  --search-match-bg: #713f12;
+  --search-current-bg: #c2410c;
+  --search-fg: #fff7ed;
+}
+
+/* ---------- พื้นตาราง "ขาวเสมอ" (เฉพาะพื้นที่ตาราง ใช้ค่าชุดสว่าง) ---------- */
+[data-grid-white="true"] {
+  --grid-bg: #ffffff;
+  --grid-fg: #1f2328;
+  --grid-line: #e2e8f0;
+  --grid-header-bg: #f1f3f5;
+  --grid-header-fg: #535d6b;
+  --grid-selection: #dbeafe;
+  --grid-active-bg: #ffffff;
+  --grid-active-border: #2563eb;
+  --grid-error: #b91c1c;
+  --grid-unsupported: #b45309;
+  --fill-handle: #2563eb;
+  --fill-handle-border: #ffffff;
+  --ref-1: #2563eb;
+  --ref-2: #dc2626;
+  --ref-3: #15803d;
+  --ref-4: #9333ea;
+  --ref-5: #854d0e;
+  --ref-6: #0e7490;
+  --ref-1-bg: rgba(37, 99, 235, 0.1);
+  --ref-2-bg: rgba(220, 38, 38, 0.1);
+  --ref-3-bg: rgba(21, 128, 61, 0.1);
+  --ref-4-bg: rgba(147, 51, 234, 0.1);
+  --ref-5-bg: rgba(133, 77, 14, 0.1);
+  --ref-6-bg: rgba(14, 116, 144, 0.1);
+  --search-match-bg: #fef08a;
+  --search-current-bg: #fdba74;
+  --search-fg: #1f2328;
+  color-scheme: light;
+}
+
+/* ---------- scrollbar ---------- */
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}

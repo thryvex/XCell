@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItemConstructorOptions, nativeTheme } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { formatFsError } from '../src/core/fsError';
@@ -10,6 +10,7 @@ import {
   DEFAULT_PREFERENCES,
   AppPreferences,
 } from '../src/core/preferences';
+import { WINDOW_BACKGROUND, INITIAL_THEME_ARG, ThemePref } from '../src/core/theme';
 
 let mainWindow: BrowserWindow | null = null;
 let isForcedClose = false;
@@ -76,8 +77,20 @@ function buildAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// ธีม (5C): nativeTheme คุมเมนูแอป/แถบหัวหน้าต่าง/โหมดสีที่หน้าเว็บเห็น (prefers-color-scheme)
+function applyThemePref(pref: ThemePref | undefined) {
+  nativeTheme.themeSource = pref === 'light' || pref === 'dark' ? pref : 'system';
+}
+
+function currentWindowBackground(): string {
+  return nativeTheme.shouldUseDarkColors ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light;
+}
+
 function createWindow() {
+  applyThemePref(getPreferencesSync().theme);
   mainWindow = new BrowserWindow({
+    // สีพื้นตั้งแต่สร้างหน้าต่าง: เปิดในโหมดมืดไม่วาบขาว
+    backgroundColor: currentWindowBackground(),
     width: 1280,
     height: 800,
     minWidth: 800,
@@ -88,6 +101,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // ธีมที่ใช้จริงตอนเปิด: preload ตั้ง data-theme ก่อนหน้าเว็บวาดครั้งแรก
+      additionalArguments: [INITIAL_THEME_ARG + (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')],
     },
   });
 
@@ -186,7 +201,9 @@ ipcMain.handle('prefs:get', async () => {
 
 ipcMain.handle('prefs:set', async (_event, prefs: Partial<AppPreferences>) => {
   // รวมกับค่าเดิม: บันทึกค่าหนึ่งต้องไม่ลบค่าอื่น (เช่น รูปแบบปี)
-  savePreferencesSync(mergePreferences(getPreferencesSync(), prefs));
+  const merged = mergePreferences(getPreferencesSync(), prefs);
+  savePreferencesSync(merged);
+  if (prefs && 'theme' in prefs) applyThemePref(merged.theme);
   return { success: true };
 });
 
@@ -527,6 +544,13 @@ ipcMain.on('window:forceClose', () => {
 // App Lifecycle
 app.whenReady().then(() => {
   buildAppMenu();
+  nativeTheme.on('updated', () => {
+    // ระบบเปลี่ยนโหมด (หรือผู้ใช้เปลี่ยนธีม): สีพื้นหน้าต่างตามทันที
+    mainWindow?.setBackgroundColor(currentWindowBackground());
+    // ส่งโหมดสีให้หน้าเว็บ: prefers-color-scheme ในหน้าที่โหลดแล้วไม่เปลี่ยนตามทันที
+    // (ตอนธีม "ตามระบบ" ค่านี้คือโหมดของระบบปฏิบัติการ)
+    mainWindow?.webContents.send('theme:systemChanged', nativeTheme.shouldUseDarkColors);
+  });
   pendingInitialFile = extractFilePathFromArgs(process.argv);
   createWindow();
 

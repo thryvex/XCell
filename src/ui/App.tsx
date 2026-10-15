@@ -16,7 +16,8 @@ import { TemplateModal } from './TemplateModal';
 import { WelcomeGuideModal } from './WelcomeGuideModal';
 import { HelpModal } from './HelpModal';
 import { FormulaHelper } from './FormulaHelper';
-import { useSheetStore, isCsvPath } from './store';
+import { useSheetStore, isCsvPath, selectResolvedTheme } from './store';
+import { needsLowContrastWarning, WINDOW_BACKGROUND, ThemePref } from '../core/theme';
 import { CsvImportDialog } from './CsvImportDialog';
 import { PrintDialog } from './PrintDialog';
 import { th } from '../i18n/th';
@@ -105,6 +106,63 @@ export const App: React.FC = () => {
     })();
   }, []);
 
+  // --- ธีมสี (5C) ---
+  const resolvedTheme = useSheetStore(selectResolvedTheme);
+  const gridWhite = useSheetStore((s) => s.gridWhite);
+  useEffect(() => {
+    // ค่าที่บันทึกไว้ (userData) — main ตั้ง nativeTheme ตามค่านี้แล้วตั้งแต่สร้างหน้าต่าง
+    (async () => {
+      const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+      let theme: string | null | undefined;
+      let white = false;
+      try {
+        if (electronAPI?.getPreferences) {
+          const prefs = await electronAPI.getPreferences();
+          theme = prefs?.theme;
+          white = prefs?.gridWhite === true;
+        } else {
+          theme = localStorage.getItem('sheeteasy_theme');
+          white = localStorage.getItem('sheeteasy_grid_white') === '1';
+        }
+      } catch {}
+      const store = useSheetStore.getState();
+      if (theme === 'light' || theme === 'dark') store.setThemePref(theme as ThemePref, false);
+      if (white) store.setGridWhite(true, false);
+    })();
+  }, []);
+  useEffect(() => {
+    // โหมดของระบบ: ตามการเปลี่ยนทันที
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.onSystemThemeChanged) {
+      // Electron: main ส่งค่า nativeTheme.shouldUseDarkColors มาเมื่อเปลี่ยน
+      useSheetStore.getState().setSystemPrefersDark(electronAPI.initialTheme === 'dark');
+      return electronAPI.onSystemThemeChanged((dark: boolean) => useSheetStore.getState().setSystemPrefersDark(dark));
+    }
+    if (typeof matchMedia !== 'function') return;
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    useSheetStore.getState().setSystemPrefersDark(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => useSheetStore.getState().setSystemPrefersDark(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+  }, [resolvedTheme]);
+
+  // เปิดไฟล์ในโหมดมืดแล้วมีสีตัวอักษรที่อาจมองยาก: เตือนครั้งเดียวต่อไฟล์ต่อรอบการใช้งาน
+  const [lowContrastNotice, setLowContrastNotice] = useState(false);
+  const lowContrastShownRef = useRef<Set<string>>(new Set());
+  const checkLowContrast = (path: string) => {
+    if (lowContrastShownRef.current.has(path)) return;
+    const s = useSheetStore.getState();
+    const gridBg =
+      getComputedStyle(document.documentElement).getPropertyValue('--grid-bg').trim() || WINDOW_BACKGROUND.dark;
+    if (needsLowContrastWarning(s.workbook, selectResolvedTheme(s), s.gridWhite, gridBg)) {
+      lowContrastShownRef.current.add(path);
+      setLowContrastNotice(true);
+    }
+  };
+
   // บันทึกสำเร็จ: ถ้าแสดงปีเป็น พ.ศ. แจ้งครั้งเดียวว่าไฟล์เก็บปีเป็น ค.ศ.
   const markSavedAndNotify = (path: string) => {
     markSaved(path);
@@ -139,9 +197,12 @@ export const App: React.FC = () => {
         beginCsvImport(data, path, 'open');
         return;
       }
+      setLowContrastNotice(false);
       await loadWorkbook(data, path);
       showToast(th.messages.fileOpened);
+      if (useSheetStore.getState().filePath === path) checkLowContrast(path);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [beginCsvImport, loadWorkbook, showToast]
   );
 
@@ -691,7 +752,7 @@ export const App: React.FC = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+            backgroundColor: 'var(--drop-overlay)',
             border: '3px dashed var(--color-primary)',
             zIndex: 9999,
             display: 'flex',
@@ -726,9 +787,9 @@ export const App: React.FC = () => {
       {(unsupportedFeatures.length > 0 || hiddenSheetNotice > 0) && (
         <div
           style={{
-            backgroundColor: '#fef3c7',
-            color: '#92400e',
-            borderBottom: '1px solid #fcd34d',
+            backgroundColor: 'var(--banner-warn-bg)',
+            color: 'var(--banner-warn-fg)',
+            borderBottom: '1px solid var(--banner-warn-border)',
             padding: '7px 16px',
             display: 'flex',
             alignItems: 'center',
@@ -754,9 +815,9 @@ export const App: React.FC = () => {
                 padding: '4px 10px',
                 fontSize: '12px',
                 fontWeight: 600,
-                backgroundColor: '#ffffff',
-                border: '1px solid #d97706',
-                color: '#92400e',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--banner-warn-border)',
+                color: 'var(--banner-warn-fg)',
                 borderRadius: '4px',
                 cursor: 'pointer',
               }}
@@ -771,7 +832,7 @@ export const App: React.FC = () => {
                 fontSize: '13px',
                 background: 'transparent',
                 border: 'none',
-                color: '#92400e',
+                color: 'var(--banner-warn-fg)',
                 cursor: 'pointer',
               }}
               onClick={dismissUnsupportedBanner}
@@ -788,9 +849,9 @@ export const App: React.FC = () => {
         <div
           role="status"
           style={{
-            backgroundColor: '#e0f2fe',
-            color: '#075985',
-            borderBottom: '1px solid #7dd3fc',
+            backgroundColor: 'var(--banner-info-bg)',
+            color: 'var(--banner-info-fg)',
+            borderBottom: '1px solid var(--banner-info-border)',
             padding: '7px 16px',
             display: 'flex',
             alignItems: 'center',
@@ -806,7 +867,45 @@ export const App: React.FC = () => {
             <button
               onClick={dismissFilteredRowsNotice}
               title={th.banner.dismiss}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--banner-info-fg)' }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* สีตัวอักษรในไฟล์อาจมองยากบนพื้นมืด (5C) */}
+      {lowContrastNotice && resolvedTheme === 'dark' && !gridWhite && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: 'var(--banner-warn-bg)',
+            color: 'var(--banner-warn-fg)',
+            borderBottom: '1px solid var(--banner-warn-border)',
+            padding: '7px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+          }}
+        >
+          <span>⚠️ {th.theme.lowContrastBanner}</span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => {
+                useSheetStore.getState().setGridWhite(true);
+                setLowContrastNotice(false);
+              }}
+              style={{ fontSize: '12px', fontWeight: 600 }}
+            >
+              {th.theme.useWhiteGrid}
+            </button>
+            <button
+              onClick={() => setLowContrastNotice(false)}
+              title={th.banner.dismiss}
+              aria-label={th.banner.dismiss}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--banner-warn-fg)' }}
             >
               ✕
             </button>
@@ -829,11 +928,11 @@ export const App: React.FC = () => {
             position: 'fixed',
             bottom: '36px',
             right: '16px',
-            backgroundColor: 'var(--color-primary)',
-            color: '#ffffff',
+            backgroundColor: 'var(--toast-bg)',
+            color: 'var(--toast-fg)',
             padding: '8px 16px',
             borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            boxShadow: 'var(--shadow-menu)',
             zIndex: 2000,
             fontSize: '13px',
             fontWeight: 500,
@@ -918,7 +1017,7 @@ export const App: React.FC = () => {
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.35)',
+            backgroundColor: 'var(--overlay)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -937,7 +1036,7 @@ export const App: React.FC = () => {
               flexDirection: 'column',
               gap: '12px',
               fontSize: '14px',
-              boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+              boxShadow: 'var(--shadow-dialog)',
             }}
           >
             <h3 style={{ margin: 0, fontSize: '16px' }}>ℹ️ {th.yearNotice.title}</h3>

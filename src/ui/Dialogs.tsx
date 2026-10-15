@@ -32,7 +32,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        backgroundColor: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -47,7 +47,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           padding: '20px 24px',
           width: '420px',
           maxWidth: '90%',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+          boxShadow: 'var(--shadow-dialog)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -63,7 +63,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               danger
                 ? {
                     backgroundColor: 'var(--color-danger)',
-                    color: '#ffffff',
+                    color: 'var(--fg-on-primary)',
                     border: 'none',
                     borderRadius: '4px',
                     padding: '6px 14px',
@@ -105,7 +105,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -120,7 +120,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
           padding: '20px 24px',
           width: '440px',
           maxWidth: '90%',
-          boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+          boxShadow: 'var(--shadow-dialog)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -137,7 +137,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
           <button
             style={{
               backgroundColor: 'var(--color-danger)',
-              color: '#ffffff',
+              color: 'var(--fg-on-primary)',
               border: 'none',
               borderRadius: '4px',
               padding: '6px 14px',
@@ -182,7 +182,7 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.55)',
+        backgroundColor: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -197,7 +197,7 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
           padding: '24px',
           width: '520px',
           maxWidth: '92%',
-          boxShadow: '0 10px 32px rgba(0, 0, 0, 0.3)',
+          boxShadow: 'var(--shadow-dialog)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -265,7 +265,7 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
           <button
             style={{
               backgroundColor: 'var(--color-danger)',
-              color: '#ffffff',
+              color: 'var(--fg-on-primary)',
               border: 'none',
               borderRadius: '4px',
               padding: '6px 14px',
@@ -313,7 +313,7 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -328,13 +328,13 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
           padding: '20px 24px',
           width: '480px',
           maxWidth: '90%',
-          boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+          boxShadow: 'var(--shadow-dialog)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
         }}
       >
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#d97706' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--color-warning)' }}>
           ⚠️ {th.dialog.overwriteWarningTitle}
         </h3>
         <p style={{ margin: 0, color: 'var(--fg-main)', lineHeight: 1.5, fontSize: '14px' }}>
@@ -345,7 +345,7 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
           <button
             style={{
               backgroundColor: 'var(--color-danger)',
-              color: '#ffffff',
+              color: 'var(--fg-on-primary)',
               border: 'none',
               borderRadius: '4px',
               padding: '6px 14px',

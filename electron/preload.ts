@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+// ธีมที่ใช้จริงตอนเปิดหน้าต่าง (main ส่งมาเป็นอาร์กิวเมนต์ ต้องตรงกับ INITIAL_THEME_ARG ใน src/core/theme.ts)
+// ประกาศเองที่นี่เพราะ preload แบบ sandbox โหลดไฟล์อื่นไม่ได้
+const INITIAL_THEME_ARG = '--sheeteasy-theme=';
+const initialTheme: 'light' | 'dark' =
+  process.argv.find((a) => a.startsWith(INITIAL_THEME_ARG))?.slice(INITIAL_THEME_ARG.length) === 'dark' ? 'dark' : 'light';
+
 export interface RecoveryItem {
   id: string;
   originalPath: string | null;
@@ -19,6 +25,8 @@ export interface ElectronAPI {
   writeFile: (filePath: string, buffer: number[]) => Promise<{ success: boolean; error?: string }>;
   readFile: (filePath: string) => Promise<{ success: boolean; data?: number[]; error?: string }>;
   setTitle: (title: string) => void;
+  initialTheme: 'light' | 'dark';
+  onSystemThemeChanged: (callback: (dark: boolean) => void) => () => void;
   // Recent files
   getRecentFiles: () => Promise<string[]>;
   addRecentFile: (filePath: string) => Promise<string[]>;
@@ -67,6 +75,12 @@ const electronAPI: ElectronAPI = {
     const handler = () => callback();
     ipcRenderer.on('app:requestClose', handler);
     return () => ipcRenderer.removeListener('app:requestClose', handler);
+  },
+  initialTheme,
+  onSystemThemeChanged: (callback) => {
+    const handler = (_event: any, dark: boolean) => callback(dark === true);
+    ipcRenderer.on('theme:systemChanged', handler);
+    return () => ipcRenderer.removeListener('theme:systemChanged', handler);
   },
   getPreferences: () => ipcRenderer.invoke('prefs:get'),
   setPreferences: (prefs) => ipcRenderer.invoke('prefs:set', prefs),

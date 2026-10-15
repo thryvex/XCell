@@ -112,9 +112,9 @@ export const SheetTabs: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         height: '34px',
-        backgroundColor: 'var(--bg-toolbar, #f8fafc)',
-        borderTop: '1px solid var(--border-color, #e2e8f0)',
-        borderBottom: '1px solid var(--border-color, #e2e8f0)',
+        backgroundColor: 'var(--tab-bar-bg)',
+        borderTop: '1px solid var(--border-color)',
+        borderBottom: '1px solid var(--border-color)',
         padding: '0 8px',
         userSelect: 'none',
         gap: '4px',
@@ -135,20 +135,20 @@ export const SheetTabs: React.FC = () => {
           borderRadius: '4px',
           border: '1px solid transparent',
           backgroundColor: 'transparent',
-          color: 'var(--fg-main, #334155)',
+          color: 'var(--fg-main)',
           cursor: 'pointer',
           fontSize: '18px',
           fontWeight: 600,
           padding: 0,
           flexShrink: 0,
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.06)')}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--hover-tint)')}
         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
       >
         ＋
       </button>
 
-      <div style={{ width: '1px', height: '18px', backgroundColor: 'var(--border-color, #cbd5e1)', margin: '0 4px', flexShrink: 0 }} />
+      <div style={{ width: '1px', height: '18px', backgroundColor: 'var(--border-color)', margin: '0 4px', flexShrink: 0 }} />
 
       {/* Sheet Tabs List */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, overflowX: 'auto' }}>
@@ -188,12 +188,12 @@ export const SheetTabs: React.FC = () => {
                 borderRadius: '4px 4px 0 0',
                 fontSize: '13px',
                 fontWeight: isActive ? 600 : 400,
-                backgroundColor: isActive ? 'var(--bg-app, #ffffff)' : 'transparent',
-                color: isActive ? 'var(--color-primary, #0f766e)' : 'var(--fg-muted, #64748b)',
-                borderBottom: isActive ? '2px solid var(--color-primary, #0f766e)' : '2px solid transparent',
-                borderLeft: isDragOver ? '2px solid var(--color-primary, #0f766e)' : '1px solid transparent',
+                backgroundColor: isActive ? 'var(--tab-active-bg)' : 'transparent',
+                color: isActive ? 'var(--tab-active-fg)' : 'var(--tab-fg)',
+                borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',
+                borderLeft: isDragOver ? '2px solid var(--color-primary)' : '1px solid transparent',
                 borderRight: '1px solid transparent',
-                borderTop: isActive ? '1px solid var(--border-color, #e2e8f0)' : '1px solid transparent',
+                borderTop: isActive ? '1px solid var(--border-color)' : '1px solid transparent',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 transition: 'all 0.15s ease',
@@ -227,11 +227,11 @@ export const SheetTabs: React.FC = () => {
                       height: '20px',
                       padding: '0 4px',
                       fontSize: '13px',
-                      border: '1px solid var(--color-primary, #0f766e)',
+                      border: '1px solid var(--color-primary)',
                       borderRadius: '2px',
                       outline: 'none',
-                      backgroundColor: 'var(--bg-app, #ffffff)',
-                      color: 'var(--fg-main, #0f172a)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--fg-main)',
                       width: '120px',
                     }}
                   />
@@ -249,7 +249,7 @@ export const SheetTabs: React.FC = () => {
         <span
           role="alert"
           style={{
-            color: '#dc2626',
+            color: 'var(--color-danger)',
             fontSize: '12px',
             fontWeight: 500,
             whiteSpace: 'nowrap',
@@ -269,10 +269,10 @@ export const SheetTabs: React.FC = () => {
             position: 'fixed',
             top: contextMenu.y - 120,
             left: contextMenu.x,
-            backgroundColor: 'var(--bg-app, #ffffff)',
-            border: '1px solid var(--border-color, #e2e8f0)',
+            backgroundColor: 'var(--menu-bg)',
+            border: '1px solid var(--border-color)',
             borderRadius: '6px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            boxShadow: 'var(--shadow-menu)',
             zIndex: 1000,
             padding: '4px 0',
             minWidth: '150px',
@@ -282,7 +282,7 @@ export const SheetTabs: React.FC = () => {
           <div
             onClick={() => handleStartRename(contextMenu.sheetIndex)}
             style={{ padding: '6px 12px', cursor: 'pointer' }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--menu-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             ✏️ {th.sheetTabs.rename}
@@ -293,12 +293,12 @@ export const SheetTabs: React.FC = () => {
               setContextMenu(null);
             }}
             style={{ padding: '6px 12px', cursor: 'pointer' }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--menu-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             📋 {th.sheetTabs.duplicate}
           </div>
-          <div style={{ height: '1px', backgroundColor: 'var(--border-color, #e2e8f0)', margin: '4px 0' }} />
+          <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
           <div
             onClick={() => {
               if (menuPrev !== null) {
@@ -312,7 +312,7 @@ export const SheetTabs: React.FC = () => {
               opacity: menuPrev !== null ? 1 : 0.5,
             }}
             onMouseEnter={(e) => {
-              if (menuPrev !== null) e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)';
+              if (menuPrev !== null) e.currentTarget.style.backgroundColor = 'var(--menu-hover)';
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
@@ -332,13 +332,13 @@ export const SheetTabs: React.FC = () => {
             }}
             onMouseEnter={(e) => {
               if (menuNext !== null)
-                e.currentTarget.style.backgroundColor = 'var(--bg-toolbar, #f1f5f9)';
+                e.currentTarget.style.backgroundColor = 'var(--menu-hover)';
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             ▶ {th.sheetTabs.moveRight}
           </div>
-          <div style={{ height: '1px', backgroundColor: 'var(--border-color, #e2e8f0)', margin: '4px 0' }} />
+          <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
           <div
             onClick={() => {
               if (canDelete) {
@@ -348,11 +348,11 @@ export const SheetTabs: React.FC = () => {
             }}
             style={{
               padding: '6px 12px',
-              color: canDelete ? '#ef4444' : '#94a3b8',
+              color: canDelete ? 'var(--color-danger)' : 'var(--fg-muted)',
               cursor: canDelete ? 'pointer' : 'not-allowed',
             }}
             onMouseEnter={(e) => {
-              if (canDelete) e.currentTarget.style.backgroundColor = '#fef2f2';
+              if (canDelete) e.currentTarget.style.backgroundColor = 'var(--danger-bg)';
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >

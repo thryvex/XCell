@@ -9,7 +9,7 @@ const MAX_SORT_KEYS = 3;
 const overlay: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.35)',
+  backgroundColor: 'var(--overlay)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -22,7 +22,7 @@ const panel: React.CSSProperties = {
   padding: '20px 24px',
   width: '440px',
   maxWidth: '92%',
-  boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+  boxShadow: 'var(--shadow-dialog)',
   display: 'flex',
   flexDirection: 'column',
   gap: '14px',

@@ -2,41 +2,11 @@
 @import "@fontsource/sarabun/500.css";
 @import "@fontsource/sarabun/600.css";
 @import "@fontsource/sarabun/700.css";
+@import "./ui/theme.css";
 
 :root {
-  --bg-app: #ffffff;
-  --bg-surface: #f8fafc;
-  --bg-header: #f1f3f5;
-  --bg-selection: #dbeafe;
-  --bg-active: #ffffff;
-  --fg-main: #1f2328;
-  --fg-muted: #64748b;
-  --border-color: #d1d5db;
-  --border-grid: #e2e8f0;
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-success: #16a34a;
-  --color-danger: #dc2626;
   --font-sans: 'Sarabun', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-size-base: 14px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-app: #121417;
-    --bg-surface: #1a1d24;
-    --bg-header: #232730;
-    --bg-selection: #1e3a5f;
-    --bg-active: #1a1d24;
-    --fg-main: #e2e8f0;
-    --fg-muted: #94a3b8;
-    --border-color: #334155;
-    --border-grid: #28303e;
-    --color-primary: #3b82f6;
-    --color-primary-hover: #60a5fa;
-    --color-success: #22c55e;
-    --color-danger: #ef4444;
-  }
 }
 
 * {
@@ -57,6 +27,13 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ก่อนตั้งธีม (ยังไม่มี data-theme): โปร่งใส ให้เห็นสีพื้นหน้าต่างที่ main ตั้งตามธีม แทนการวาบขาว */
+html:not([data-theme]),
+html:not([data-theme]) body,
+html:not([data-theme]) #root {
+  background-color: transparent;
+}
+
 button, input, select, textarea {
   font-family: inherit;
   font-size: inherit;
@@ -65,7 +42,7 @@ button, input, select, textarea {
 
 button {
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   padding: 4px 10px;
   cursor: pointer;
@@ -89,7 +66,7 @@ button:active {
 
 button.primary {
   background: var(--color-primary);
-  color: #ffffff;
+  color: var(--fg-on-primary);
   border-color: var(--color-primary);
 }
 
@@ -105,7 +82,7 @@ button:disabled {
 
 select {
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   padding: 4px 8px;
   cursor: pointer;
@@ -118,7 +95,7 @@ select:focus {
 
 input {
   background: var(--bg-app);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   padding: 4px 8px;
   outline: none;
@@ -134,15 +111,4 @@ input:focus {
   height: 10px;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-surface);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--fg-muted);
-}
+/* สี scrollbar อยู่ใน ui/theme.css */

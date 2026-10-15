@@ -110,7 +110,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ col, x, y, onClose }) =>
     padding: '4px',
     border: '1px solid var(--border-color)',
     background: active ? 'var(--color-primary)' : 'transparent',
-    color: active ? '#ffffff' : 'var(--fg-main)',
+    color: active ? 'var(--fg-on-primary)' : 'var(--fg-main)',
     cursor: 'pointer',
   });
 
@@ -133,7 +133,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ col, x, y, onClose }) =>
           backgroundColor: 'var(--bg-app)',
           border: '1px solid var(--border-color)',
           borderRadius: '6px',
-          boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
+          boxShadow: 'var(--shadow-menu)',
           padding: '8px',
           fontSize: '13px',
           display: 'flex',
@@ -165,7 +165,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ col, x, y, onClose }) =>
               value={search}
               placeholder={th.filter.searchValues}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ padding: '4px 6px', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+              style={{ padding: '4px 6px', border: '1px solid var(--control-border)', borderRadius: '4px' }}
             />
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -221,7 +221,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ col, x, y, onClose }) =>
                 value={v1}
                 placeholder={condType === 'between' ? th.filter.conditionMin : th.filter.conditionValue}
                 onChange={(e) => setV1(e.target.value)}
-                style={{ padding: '4px 6px', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                style={{ padding: '4px 6px', border: '1px solid var(--control-border)', borderRadius: '4px' }}
               />
             )}
             {condType === 'between' && (
@@ -229,7 +229,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ col, x, y, onClose }) =>
                 value={v2}
                 placeholder={th.filter.conditionMax}
                 onChange={(e) => setV2(e.target.value)}
-                style={{ padding: '4px 6px', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                style={{ padding: '4px 6px', border: '1px solid var(--control-border)', borderRadius: '4px' }}
               />
             )}
             {NUMERIC_CONDITIONS.includes(condType) && (

@@ -66,7 +66,7 @@ export const SearchBar: React.FC = () => {
         backgroundColor: 'var(--bg-app)',
         border: '1px solid var(--border-color)',
         borderRadius: '6px',
-        boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+        boxShadow: 'var(--shadow-menu)',
         padding: '6px 8px',
         fontSize: '13px',
         minWidth: '320px',
@@ -81,7 +81,7 @@ export const SearchBar: React.FC = () => {
           onKeyDown={handleKeyDown}
           style={{
             flex: 1,
-            border: '1px solid var(--border-color)',
+            border: '1px solid var(--control-border)',
             borderRadius: '4px',
             padding: '4px 6px',
             fontSize: '13px',

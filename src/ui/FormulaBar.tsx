@@ -125,7 +125,7 @@ export const FormulaBar: React.FC = () => {
         placeholder={th.formulaBar.placeholder}
         style={{
           flex: 1,
-          border: '1px solid var(--border-color)',
+          border: '1px solid var(--control-border)',
           borderRadius: '4px',
           padding: '4px 8px',
           fontSize: '14px',

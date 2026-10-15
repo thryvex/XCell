@@ -15,14 +15,8 @@ const DEFAULT_ROW_HEIGHT = 28;
 const HEADER_ROW_HEIGHT = 28;
 const HEADER_COL_WIDTH = 45;
 
-const HIGHLIGHT_COLORS = [
-  '#2563eb', // Blue
-  '#dc2626', // Red
-  '#16a34a', // Green
-  '#9333ea', // Purple
-  '#ea580c', // Orange
-  '#0891b2', // Cyan
-];
+// ชื่อ token สี reference ตอนแก้สูตร (ค่าสีจริงอยู่ใน theme.css: --ref-1 … --ref-6)
+const HIGHLIGHT_COLORS = ['ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5', 'ref-6'];
 
 export const Grid: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,6 +85,8 @@ export const Grid: React.FC = () => {
     zoomOut,
     resetZoom,
   } = useSheetStore();
+  // พื้นตาราง "ขาวเสมอ" (5C): เปลี่ยนเฉพาะ token ของพื้นที่ตาราง (theme.css [data-grid-white])
+  const gridWhite = useSheetStore((s) => s.gridWhite);
 
   const sheet = workbook.sheets[activeSheetIndex];
   const sheetId = sheet.id;
@@ -741,8 +737,8 @@ export const Grid: React.FC = () => {
       top: `${top - 4}px`,
       width: '7px',
       height: '7px',
-      backgroundColor: 'var(--color-primary)',
-      border: '1px solid #ffffff',
+      backgroundColor: 'var(--fill-handle)',
+      border: '1px solid var(--fill-handle-border)',
       cursor: 'crosshair',
       zIndex: 8,
     };
@@ -751,12 +747,13 @@ export const Grid: React.FC = () => {
   return (
     <div
       ref={containerRef}
+      data-grid-white={gridWhite ? 'true' : undefined}
       onScroll={(e) => rememberScroll(e.currentTarget.scrollTop, e.currentTarget.scrollLeft)}
       style={{
         flex: 1,
         overflow: 'auto',
         position: 'relative',
-        backgroundColor: 'var(--bg-app)',
+        backgroundColor: 'var(--grid-bg)',
       }}
     >
       {/* ซูมเฉพาะพื้นที่ตาราง (CSS zoom): การคลิก/ลากใช้พิกัดของ element จึงตรงทุกระดับซูม */}
@@ -777,14 +774,14 @@ export const Grid: React.FC = () => {
             ref={inputRef}
             style={{
               ...editorStyle,
-              border: '2px solid var(--color-primary)',
+              border: '2px solid var(--grid-active-border)',
               padding: '0 6px',
               fontSize: '14px',
               fontFamily: 'inherit',
               boxSizing: 'border-box',
               outline: 'none',
-              backgroundColor: 'var(--bg-app)',
-              color: 'var(--fg-main)',
+              backgroundColor: 'var(--grid-bg)',
+              color: 'var(--grid-fg)',
             }}
             value={editingValue}
             onChange={(e) => setEditingValue(e.target.value)}
@@ -844,8 +841,8 @@ export const Grid: React.FC = () => {
                   width: `${HEADER_COL_WIDTH}px`,
                   minWidth: `${HEADER_COL_WIDTH}px`,
                   height: `${HEADER_ROW_HEIGHT}px`,
-                  backgroundColor: 'var(--bg-header)',
-                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--grid-header-bg)',
+                  border: '1px solid var(--grid-line)',
                   cursor: 'pointer',
                 }}
               />
@@ -873,10 +870,10 @@ export const Grid: React.FC = () => {
                       minWidth: `${width}px`,
                       maxWidth: `${width}px`,
                       height: `${HEADER_ROW_HEIGHT}px`,
-                      backgroundColor: isColSelected ? 'var(--bg-selection)' : 'var(--bg-header)',
-                      color: 'var(--fg-muted)',
-                      border: '1px solid var(--border-color)',
-                      borderRight: isFrozen && c === sheet.frozenCols - 1 ? '3px solid var(--color-primary)' : '1px solid var(--border-color)',
+                      backgroundColor: isColSelected ? 'var(--grid-selection)' : 'var(--grid-header-bg)',
+                      color: 'var(--grid-header-fg)',
+                      border: '1px solid var(--grid-line)',
+                      borderRight: isFrozen && c === sheet.frozenCols - 1 ? '3px solid var(--grid-active-border)' : '1px solid var(--grid-line)',
                       fontWeight: 600,
                       textAlign: 'center',
                       cursor: 'pointer',
@@ -934,10 +931,10 @@ export const Grid: React.FC = () => {
                       width: `${HEADER_COL_WIDTH}px`,
                       minWidth: `${HEADER_COL_WIDTH}px`,
                       height: `${height}px`,
-                      backgroundColor: isRowSelected ? 'var(--bg-selection)' : 'var(--bg-header)',
-                      color: 'var(--fg-muted)',
-                      border: '1px solid var(--border-color)',
-                      borderBottom: isFrozenRow && r === sheet.frozenRows - 1 ? '3px solid var(--color-primary)' : '1px solid var(--border-color)',
+                      backgroundColor: isRowSelected ? 'var(--grid-selection)' : 'var(--grid-header-bg)',
+                      color: 'var(--grid-header-fg)',
+                      border: '1px solid var(--grid-line)',
+                      borderBottom: isFrozenRow && r === sheet.frozenRows - 1 ? '3px solid var(--grid-active-border)' : '1px solid var(--grid-line)',
                       fontWeight: 500,
                       textAlign: 'center',
                       cursor: 'pointer',
@@ -1040,10 +1037,10 @@ export const Grid: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            backgroundColor: 'var(--bg-app)',
+            backgroundColor: 'var(--grid-bg)',
           }}
         >
-          <span style={{ fontSize: '13px', color: 'var(--fg-muted)' }}>
+          <span style={{ fontSize: '13px', color: 'var(--grid-header-fg)' }}>
             {th.grid.appendRowsLabel}
           </span>
           <button
@@ -1052,9 +1049,9 @@ export const Grid: React.FC = () => {
               padding: '4px 12px',
               fontSize: '13px',
               fontWeight: 500,
-              backgroundColor: 'var(--bg-toolbar)',
-              color: 'var(--fg-primary)',
-              border: '1px solid var(--border-color)',
+              backgroundColor: 'var(--grid-header-bg)',
+              color: 'var(--grid-fg)',
+              border: '1px solid var(--control-border)',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
@@ -1067,16 +1064,16 @@ export const Grid: React.FC = () => {
               padding: '4px 12px',
               fontSize: '13px',
               fontWeight: 500,
-              backgroundColor: 'var(--bg-toolbar)',
-              color: 'var(--fg-primary)',
-              border: '1px solid var(--border-color)',
+              backgroundColor: 'var(--grid-header-bg)',
+              color: 'var(--grid-fg)',
+              border: '1px solid var(--control-border)',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
           >
             {th.grid.add100Rows}
           </button>
-          <span style={{ fontSize: '12px', color: 'var(--fg-muted)', marginLeft: '8px' }}>
+          <span style={{ fontSize: '12px', color: 'var(--grid-header-fg)', marginLeft: '8px' }}>
             {th.grid.currentRows.replace('{count}', String(rowCount))}
           </span>
         </div>

@@ -37,6 +37,7 @@ import { th } from '../i18n/th';
 import { convertShorthand } from '../core/shorthand';
 import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/address';
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../core/xlsx';
+import { resolveTheme, ThemePref, ResolvedTheme } from '../core/theme';
 import { formatDisplayValue, convertTypedDate, editTextForCell, todaySerial, formatDate, setDisplayYearMode, YearMode } from '../core/numfmt';
 import { shiftFormula } from '../core/refshift';
 import {
@@ -288,6 +289,14 @@ export interface SheetState {
   yearMode: YearMode;
   setYearMode: (mode: YearMode, persist?: boolean) => void;
 
+  // Phase 5C: ธีมสีและพื้นตาราง (ค่าของแอป เก็บใน userData ไม่อยู่ใน workbook/ไฟล์กู้คืน)
+  themePref: ThemePref;
+  gridWhite: boolean;
+  systemPrefersDark: boolean;
+  setThemePref: (pref: ThemePref, persist?: boolean) => void;
+  setGridWhite: (on: boolean, persist?: boolean) => void;
+  setSystemPrefersDark: (dark: boolean) => void;
+
   // Phase 5B: ตัวเลือกพิมพ์ (จำต่อไฟล์ เก็บใน workbook จึงอยู่ในไฟล์กู้คืนด้วย)
   setPrintSettings: (patch: Partial<PrintSettings>) => void;
 }
@@ -335,6 +344,23 @@ export const ZOOM_STEP = 10;
 
 const DEFAULT_ROW_COUNT = 100;
 const DEFAULT_COL_COUNT = 26;
+
+/** บันทึกค่าตั้งของแอป (userData ใน Electron, localStorage ตอนรันในเบราว์เซอร์) */
+function savePreference(patch: Record<string, unknown>, localKey: string, localValue: string) {
+  const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+  if (electronAPI?.setPreferences) {
+    electronAPI.setPreferences(patch).catch(() => {});
+  } else {
+    try {
+      localStorage.setItem(localKey, localValue);
+    } catch {}
+  }
+}
+
+/** ธีมที่ใช้จริงตอนนี้ (ตามระบบ → ใช้โหมดของระบบปฏิบัติการ) */
+export function selectResolvedTheme(s: { themePref: ThemePref; systemPrefersDark: boolean }): ResolvedTheme {
+  return resolveTheme(s.themePref, s.systemPrefersDark);
+}
 
 function defaultSheetView(activeCell = { r: 0, c: 0 }): SheetView {
   return {
@@ -830,6 +856,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   filteredRowsNotice: false,
   pendingCsvImport: null,
   yearMode: 'ce',
+  themePref: 'system',
+  gridWhite: false,
+  systemPrefersDark: false,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -1944,6 +1973,19 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       } catch {}
     }
   },
+
+  setThemePref: (pref: ThemePref, persist = true) => {
+    set({ themePref: pref });
+    // บันทึกผ่าน prefs:set — main ตั้ง nativeTheme (เมนูแอป/แถบหัวหน้าต่าง) และสีพื้นหน้าต่างตามค่านี้
+    if (persist) savePreference({ theme: pref }, 'sheeteasy_theme', pref);
+  },
+
+  setGridWhite: (on: boolean, persist = true) => {
+    set({ gridWhite: on });
+    if (persist) savePreference({ gridWhite: on }, 'sheeteasy_grid_white', on ? '1' : '0');
+  },
+
+  setSystemPrefersDark: (dark: boolean) => set({ systemPrefersDark: dark }),
 
   getCsvExport: () => {
     const { workbook, activeSheetIndex, evaluator, fileName } = get();

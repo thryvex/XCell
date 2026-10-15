@@ -16,12 +16,14 @@ interface ToolbarProps {
   onOpenHelp: () => void;
 }
 
+// theme-exempt-start: จานสีให้ผู้ใช้เลือกสีเซล (ค่าสีที่เขียนลงไฟล์ ไม่ใช่สี UI)
 const PRESET_COLORS = [
   '#000000', '#434343', '#666666', '#999999', '#cccccc', '#ffffff',
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4',
   '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#fecaca', '#fed7aa',
   '#bbf7d0', '#bfdbfe',
 ];
+// theme-exempt-end
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   onNew,
@@ -67,6 +69,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     activeSheetIndex,
     yearMode,
     setYearMode,
+    themePref,
+    setThemePref,
+    gridWhite,
+    setGridWhite,
   } = useSheetStore();
 
   const [recentMenuOpen, setRecentMenuOpen] = useState(false);
@@ -84,10 +90,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     top: '100%',
     left: 0,
     zIndex: 100,
-    backgroundColor: 'var(--bg-app)',
+    backgroundColor: 'var(--menu-bg)',
     border: '1px solid var(--border-color)',
     borderRadius: '6px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    boxShadow: 'var(--shadow-menu)',
     display: 'flex',
     flexDirection: 'column',
     minWidth: '220px',
@@ -131,7 +137,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
   const activeBtnStyle = (isActive?: boolean): React.CSSProperties => ({
     backgroundColor: isActive ? 'var(--color-primary)' : 'transparent',
-    color: isActive ? '#ffffff' : 'var(--fg-main)',
+    color: isActive ? 'var(--fg-on-primary)' : 'var(--fg-main)',
     borderColor: isActive ? 'var(--color-primary)' : 'var(--border-color)',
     fontWeight: isActive ? 600 : 400,
   });
@@ -178,7 +184,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               backgroundColor: 'var(--bg-surface)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+              boxShadow: 'var(--shadow-menu)',
               minWidth: '240px',
               maxWidth: '380px',
               marginTop: '4px',
@@ -333,10 +339,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               top: '100%',
               left: 0,
               zIndex: 100,
-              backgroundColor: 'var(--bg-app)',
+              backgroundColor: 'var(--menu-bg)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: 'var(--shadow-menu)',
               padding: '8px',
               minWidth: '180px',
               marginTop: '4px',
@@ -366,7 +372,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <label style={{ fontSize: '12px', flex: 1 }}>{th.toolbar.customColor}:</label>
               <input
                 type="color"
-                value={activeStyle.color || '#000000'}
+                value={activeStyle.color || '#000000'} // theme-exempt: ค่าเริ่มต้นของตัวเลือกสีเซล
                 onChange={(e) => {
                   setTextColor(e.target.value);
                   setTextColorOpen(false);
@@ -418,10 +424,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               top: '100%',
               left: 0,
               zIndex: 100,
-              backgroundColor: 'var(--bg-app)',
+              backgroundColor: 'var(--menu-bg)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: 'var(--shadow-menu)',
               padding: '8px',
               minWidth: '180px',
               marginTop: '4px',
@@ -451,7 +457,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <label style={{ fontSize: '12px', flex: 1 }}>{th.toolbar.customColor}:</label>
               <input
                 type="color"
-                value={activeStyle.fill || '#ffffff'}
+                value={activeStyle.fill || '#ffffff'} // theme-exempt: ค่าเริ่มต้นของตัวเลือกสีเซล
                 onChange={(e) => {
                   setFillColor(e.target.value);
                   setFillColorOpen(false);
@@ -527,10 +533,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               top: '100%',
               left: 0,
               zIndex: 100,
-              backgroundColor: 'var(--bg-app)',
+              backgroundColor: 'var(--menu-bg)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: 'var(--shadow-menu)',
               display: 'flex',
               flexDirection: 'column',
               minWidth: '150px',
@@ -640,10 +646,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               top: '100%',
               left: 0,
               zIndex: 100,
-              backgroundColor: 'var(--bg-app)',
+              backgroundColor: 'var(--menu-bg)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: 'var(--shadow-menu)',
               display: 'flex',
               flexDirection: 'column',
               minWidth: '180px',
@@ -783,10 +789,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               top: '100%',
               left: 0,
               zIndex: 100,
-              backgroundColor: 'var(--bg-app)',
+              backgroundColor: 'var(--menu-bg)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: 'var(--shadow-menu)',
               display: 'flex',
               flexDirection: 'column',
               minWidth: '160px',
@@ -882,6 +888,44 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 >
                   {yearMode === mode ? '✓ ' : ' '}
                   {mode === 'ce' ? th.settings.yearCE : th.settings.yearBE}
+                </button>
+              ))}
+              <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
+              <div style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--fg-muted)' }}>
+                {th.settings.theme}
+              </div>
+              {(['system', 'light', 'dark'] as const).map((pref) => (
+                <button
+                  key={pref}
+                  role="menuitemradio"
+                  aria-checked={themePref === pref}
+                  style={{ ...dropdownItemStyle, fontWeight: themePref === pref ? 600 : 400 }}
+                  onClick={() => {
+                    setSettingsMenuOpen(false);
+                    setThemePref(pref);
+                  }}
+                >
+                  {themePref === pref ? '✓ ' : ' '}
+                  {pref === 'system' ? th.settings.themeSystem : pref === 'light' ? th.settings.themeLight : th.settings.themeDark}
+                </button>
+              ))}
+              <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
+              <div style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--fg-muted)' }}>
+                {th.settings.gridBackground}
+              </div>
+              {([false, true] as const).map((white) => (
+                <button
+                  key={String(white)}
+                  role="menuitemradio"
+                  aria-checked={gridWhite === white}
+                  style={{ ...dropdownItemStyle, fontWeight: gridWhite === white ? 600 : 400 }}
+                  onClick={() => {
+                    setSettingsMenuOpen(false);
+                    setGridWhite(white);
+                  }}
+                >
+                  {gridWhite === white ? '✓ ' : ' '}
+                  {white ? th.settings.gridAlwaysWhite : th.settings.gridFollowTheme}
                 </button>
               ))}
             </div>

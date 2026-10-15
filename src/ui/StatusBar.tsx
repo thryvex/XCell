@@ -74,8 +74,8 @@ export const StatusBar: React.FC = () => {
         justifyContent: 'space-between',
         padding: '4px 12px',
         borderTop: '1px solid var(--border-color)',
-        backgroundColor: 'var(--bg-surface)',
-        color: 'var(--fg-muted)',
+        backgroundColor: 'var(--status-bg)',
+        color: 'var(--status-fg)',
         fontSize: '13px',
       }}
     >

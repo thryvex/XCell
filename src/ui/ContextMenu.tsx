@@ -181,7 +181,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         backgroundColor: 'var(--bg-app)',
         border: '1px solid var(--border-color)',
         borderRadius: '6px',
-        boxShadow: '0 6px 18px rgba(0, 0, 0, 0.15)',
+        boxShadow: 'var(--shadow-menu)',
         width: '240px',
         padding: '4px 0',
         display: 'flex',

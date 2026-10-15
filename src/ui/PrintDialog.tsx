@@ -136,7 +136,7 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -152,7 +152,7 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
         style={{
           backgroundColor: 'var(--bg-app)',
           borderRadius: '8px',
-          boxShadow: '0 8px 28px rgba(0,0,0,0.25)',
+          boxShadow: 'var(--shadow-dialog)',
           display: 'flex',
           gap: '20px',
           padding: '20px',
@@ -246,11 +246,11 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
           </div>
 
           {total > MANY_PAGES_WARNING && (
-            <div role="alert" style={{ color: '#b45309' }}>
+            <div role="alert" style={{ color: 'var(--color-warning)' }}>
               ⚠️ {th.print.manyPages.replace('{count}', total.toLocaleString('th-TH'))}
             </div>
           )}
-          {job.mergeSplit && <div style={{ color: '#b45309' }}>⚠️ {th.print.mergeSplit}</div>}
+          {job.mergeSplit && <div style={{ color: 'var(--color-warning)' }}>⚠️ {th.print.mergeSplit}</div>}
           {error && (
             <div role="alert" style={{ color: 'var(--color-danger)' }}>
               {error}
@@ -284,8 +284,8 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
             style={{
               width: pageWpx * previewScale,
               height: pageHpx * previewScale,
-              boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
-              backgroundColor: '#ffffff',
+              boxShadow: 'var(--shadow-paper)',
+              backgroundColor: 'var(--paper-bg)',
               overflow: 'hidden',
             }}
           >
@@ -301,7 +301,7 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
                   border: 'none',
                   transform: `scale(${previewScale})`,
                   transformOrigin: 'top left',
-                  backgroundColor: '#ffffff',
+                  backgroundColor: 'var(--paper-bg)',
                 }}
               />
             )}

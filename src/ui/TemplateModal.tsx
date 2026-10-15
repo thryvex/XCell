@@ -55,7 +55,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.55)',
+        backgroundColor: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -77,7 +77,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
           maxWidth: '92%',
           maxHeight: '90vh',
           overflowY: 'auto',
-          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.3)',
+          boxShadow: 'var(--shadow-dialog)',
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
@@ -127,7 +127,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
               cursor: 'pointer',
               gap: '10px',
               outline: 'none',
-              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)',
+              boxShadow: 'var(--shadow-menu)',
               transition: 'transform 0.1s, border-color 0.1s',
             }}
             onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { CellStyle, CellError } from '../core/model';
 import { ERROR_TOOLTIP_MAP } from '../core/numfmt';
+import { defaultTextColorOnFill } from '../core/theme';
 
 interface CellProps {
   r: number;
@@ -66,25 +67,31 @@ export const Cell: React.FC<CellProps> = ({
   // Determine background color
   let bgColor = style?.fill || 'transparent';
   if (highlightColor) {
-    bgColor = `${highlightColor}18`; // light tint
+    bgColor = `var(--${highlightColor}-bg)`; // พื้นอ่อนของสี reference
   } else if (searchHighlight === 'current') {
-    bgColor = '#fdba74'; // ผลค้นหาปัจจุบัน (สีเด่น)
+    bgColor = 'var(--search-current-bg)'; // ผลค้นหาปัจจุบัน (สีเด่น)
   } else if (searchHighlight === 'match') {
-    bgColor = '#fef08a'; // ผลค้นหาอื่น (สีอ่อน)
+    bgColor = 'var(--search-match-bg)'; // ผลค้นหาอื่น (สีอ่อน)
   } else if (isActive) {
-    bgColor = 'var(--bg-active)';
+    bgColor = 'var(--grid-active-bg)';
   } else if (isSelected) {
-    bgColor = 'var(--bg-selection)';
+    bgColor = 'var(--grid-selection)';
   }
+
+  // สีตัวอักษร: สีที่ผู้ใช้ตั้งเสมอ, ไม่ตั้งแต่มีสีพื้น (และกำลังแสดงสีพื้นนั้น) ใช้สีธีมที่อ่านบนพื้นนั้นได้ชัด
+  const textColor =
+    style?.color ||
+    (style?.fill && bgColor === style.fill ? defaultTextColorOnFill(style.fill) : undefined) ||
+    'var(--grid-fg)';
 
   // Determine outline border
   let outline = 'none';
   if (highlightColor) {
-    outline = `2px solid ${highlightColor}`;
+    outline = `2px solid var(--${highlightColor})`;
   } else if (isActive) {
-    outline = '2px solid var(--color-primary)';
+    outline = '2px solid var(--grid-active-border)';
   } else if (isCut) {
-    outline = '2px dashed var(--color-primary)';
+    outline = '2px dashed var(--grid-active-border)';
   }
 
   return (
@@ -102,9 +109,9 @@ export const Cell: React.FC<CellProps> = ({
         maxWidth: `${width}px`,
         height: `${height}px`,
         padding: '0 6px',
-        border: style?.border && style.border !== 'none' ? '1.5px solid var(--fg-main)' : '1px solid var(--border-grid)',
+        border: style?.border && style.border !== 'none' ? '1.5px solid var(--fg-main)' : '1px solid var(--grid-line)',
         backgroundColor: bgColor,
-        color: isError ? 'var(--color-danger)' : style?.color || 'var(--fg-main)',
+        color: isError ? 'var(--grid-error)' : textColor,
         fontWeight: style?.bold ? 'bold' : 'normal',
         fontStyle: style?.italic ? 'italic' : 'normal',
         textDecoration: style?.underline ? 'underline' : 'none',
@@ -132,7 +139,7 @@ export const Cell: React.FC<CellProps> = ({
             right: '2px',
             fontSize: '10px',
             lineHeight: 1,
-            color: '#d97706',
+            color: 'var(--grid-unsupported)',
             pointerEvents: 'none',
           }}
           title={tooltip}
@@ -163,12 +170,12 @@ export const Cell: React.FC<CellProps> = ({
             padding: 0,
             lineHeight: '16px',
             fontSize: '10px',
-            border: '1px solid var(--border-color)',
+            border: '1px solid var(--control-border)',
             borderRadius: '3px',
             cursor: 'pointer',
             // คอลัมน์ที่กรองอยู่: ปุ่มสีเด่น + สัญลักษณ์กรวย
-            backgroundColor: filterButton.active ? 'var(--color-primary)' : 'var(--bg-app)',
-            color: filterButton.active ? '#ffffff' : 'var(--fg-main)',
+            backgroundColor: filterButton.active ? 'var(--color-primary)' : 'var(--grid-bg)',
+            color: filterButton.active ? 'var(--fg-on-primary)' : 'var(--grid-fg)',
             zIndex: 3,
           }}
         >

@@ -10,7 +10,7 @@ const PRESET_DELIMITERS = [',', ';', '\t'];
 const overlay: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.35)',
+  backgroundColor: 'var(--overlay)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -149,7 +149,7 @@ export const CsvImportDialog: React.FC = () => {
                       <td
                         key={c}
                         style={{
-                          border: '1px solid var(--border-grid)',
+                          border: '1px solid var(--border-color)',
                           padding: '2px 6px',
                           maxWidth: '160px',
                           overflow: 'hidden',
@@ -184,7 +184,7 @@ const panelStyle: React.CSSProperties = {
   padding: '20px 24px',
   width: '460px',
   maxWidth: '94%',
-  boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+  boxShadow: 'var(--shadow-dialog)',
   display: 'flex',
   flexDirection: 'column',
   gap: '12px',
