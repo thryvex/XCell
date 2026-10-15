@@ -18,11 +18,13 @@ export interface ClipboardData {
 export function rangeToTsv(
   sheet: Sheet,
   range: { r1: number; c1: number; r2: number; c2: number },
-  getDisplayVal: (r: number, c: number) => string
+  getDisplayVal: (r: number, c: number) => string,
+  skipRows?: Set<number> // แถวที่ซ่อนด้วยตัวกรอง (ไม่คัดลอก)
 ): string {
   const rows: string[] = [];
 
   for (let r = range.r1; r <= range.r2; r++) {
+    if (skipRows?.has(r)) continue;
     const cols: string[] = [];
     for (let c = range.c1; c <= range.c2; c++) {
       cols.push(getDisplayVal(r, c));
@@ -39,11 +41,13 @@ export function rangeToTsv(
 export function rangeToHtml(
   sheet: Sheet,
   range: { r1: number; c1: number; r2: number; c2: number },
-  getDisplayVal: (r: number, c: number) => string
+  getDisplayVal: (r: number, c: number) => string,
+  skipRows?: Set<number> // แถวที่ซ่อนด้วยตัวกรอง (ไม่คัดลอก)
 ): string {
   let html = '<table>\n';
 
   for (let r = range.r1; r <= range.r2; r++) {
+    if (skipRows?.has(r)) continue;
     html += '  <tr>\n';
     for (let c = range.c1; c <= range.c2; c++) {
       const a1 = cellToA1(r, c);

@@ -2,6 +2,12 @@ import { Sheet, Cell, MergeRange, Workbook } from './model';
 import { SheetCellPatch } from './history';
 import { parseA1, cellToA1 } from './address';
 import { shiftFormulaOnInsert, shiftFormulaOnDelete, RefScope } from './refshift';
+import {
+  adjustFilterOnInsertRows,
+  adjustFilterOnDeleteRows,
+  adjustFilterOnInsertCols,
+  adjustFilterOnDeleteCols,
+} from './filter';
 
 /** สูตรในชีตนี้: ปรับเฉพาะ reference ที่ชี้ชีตนี้ (ไม่มีชื่อชีต หรือระบุชื่อชีตนี้เอง) */
 function ownScope(sheet: Sheet): RefScope {
@@ -55,6 +61,7 @@ export function insertRow(sheet: Sheet, atRow: number, count = 1): Sheet {
   sheet.merges = newMerges;
   sheet.rowHeights = newHeights;
 
+  adjustFilterOnInsertRows(sheet, atRow, count);
   return sheet;
 }
 
@@ -112,6 +119,7 @@ export function deleteRow(sheet: Sheet, atRow: number, count = 1): Sheet {
 
   sheet.cells = newCells;
   sheet.merges = newMerges;
+  adjustFilterOnDeleteRows(sheet, atRow, count);
   return sheet;
 }
 
@@ -150,6 +158,7 @@ export function insertCol(sheet: Sheet, atCol: number, count = 1): Sheet {
 
   sheet.cells = newCells;
   sheet.merges = newMerges;
+  adjustFilterOnInsertCols(sheet, atCol, count);
   return sheet;
 }
 
@@ -205,6 +214,7 @@ export function deleteCol(sheet: Sheet, atCol: number, count = 1): Sheet {
 
   sheet.cells = newCells;
   sheet.merges = newMerges;
+  adjustFilterOnDeleteCols(sheet, atCol, count);
   return sheet;
 }
 

@@ -15,6 +15,8 @@ interface CellProps {
   isUnsupportedFormula?: boolean;
   highlightColor?: string;
   searchHighlight?: 'match' | 'current'; // ผลค้นหา (4C)
+  // ปุ่มลูกศรตัวกรองที่เซลหัวตาราง (4C): active = คอลัมน์นี้กำลังกรองอยู่
+  filterButton?: { active: boolean; title: string; onOpen: (x: number, y: number) => void };
   style?: CellStyle;
   rowSpan?: number;
   colSpan?: number;
@@ -35,6 +37,7 @@ export const Cell: React.FC<CellProps> = ({
   isUnsupportedFormula,
   highlightColor,
   searchHighlight,
+  filterButton,
   style,
   rowSpan,
   colSpan,
@@ -138,6 +141,40 @@ export const Cell: React.FC<CellProps> = ({
         </span>
       )}
       {displayValue}
+      {filterButton && (
+        <button
+          type="button"
+          title={filterButton.title}
+          aria-pressed={filterButton.active}
+          onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            filterButton.onOpen(rect.left, rect.bottom + 2);
+          }}
+          style={{
+            position: 'absolute',
+            right: '2px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '18px',
+            height: '18px',
+            padding: 0,
+            lineHeight: '16px',
+            fontSize: '10px',
+            border: '1px solid var(--border-color)',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            // คอลัมน์ที่กรองอยู่: ปุ่มสีเด่น + สัญลักษณ์กรวย
+            backgroundColor: filterButton.active ? 'var(--color-primary)' : 'var(--bg-app)',
+            color: filterButton.active ? '#ffffff' : 'var(--fg-main)',
+            zIndex: 3,
+          }}
+        >
+          {filterButton.active ? '▼' : '▾'}
+        </button>
+      )}
     </td>
   );
 };

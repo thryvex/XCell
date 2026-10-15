@@ -175,6 +175,18 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
       }
     }
 
+    // ตัวกรอง: เขียนช่วง autoFilter และสถานะแถวที่ซ่อนตามจริง (เงื่อนไขกรองไม่ถูกเขียน)
+    if (sheetModel.filter) {
+      const f = sheetModel.filter;
+      ws.autoFilter = {
+        from: { row: f.r1 + 1, column: f.c1 + 1 },
+        to: { row: f.r2 + 1, column: f.c2 + 1 },
+      };
+    }
+    for (const r of sheetModel.hiddenRows ?? []) {
+      ws.getRow(r + 1).hidden = true;
+    }
+
     // Apply merges
     for (const m of sheetModel.merges) {
       ws.mergeCells(m.r1 + 1, m.c1 + 1, m.r2 + 1, m.c2 + 1);
@@ -408,6 +420,17 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
       }
     }
 
+    // ตัวกรอง: .xlsx (ผ่าน ExcelJS) เก็บได้แค่ช่วง autoFilter ไม่มีเงื่อนไขกรอง
+    const af = ws.autoFilter as ExcelJS.AutoFilter | undefined;
+    const afRange = parseAutoFilterRange(af);
+    if (afRange) sheet.filter = { ...afRange, columns: {} };
+    // แถวที่ซ่อน (จากตัวกรอง)
+    const hiddenRows: number[] = [];
+    ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      if (row.hidden) hiddenRows.push(rowNumber - 1);
+    });
+    if (hiddenRows.length > 0) sheet.hiddenRows = hiddenRows;
+
     sheets.push(sheet);
   });
 
@@ -439,4 +462,35 @@ export async function importFromXlsxBuffer(data: Uint8Array): Promise<Workbook> 
   // ExcelJS รับ Uint8Array ได้จริง แต่ type ประกาศเป็น Buffer ของ Node
   await excelWb.xlsx.load(data as unknown as Parameters<typeof excelWb.xlsx.load>[0]);
   return await excelJSToWorkbook(excelWb);
+}
+
+/** แปลงค่า autoFilter ของ ExcelJS ("A1:C10" หรือ {from, to}) เป็นช่วง 0-based */
+function parseAutoFilterRange(
+  af: ExcelJS.AutoFilter | undefined
+): { r1: number; c1: number; r2: number; c2: number } | null {
+  if (!af) return null;
+  const toCoord = (v: string | { row: number; column: number }) => {
+    if (typeof v === 'string') {
+      const p = parseA1(v.replace(/\$/g, ''));
+      return p ? { r: p.r, c: p.c } : null;
+    }
+    return { r: v.row - 1, c: v.column - 1 };
+  };
+  let from: { r: number; c: number } | null;
+  let to: { r: number; c: number } | null;
+  if (typeof af === 'string') {
+    const [a, b] = af.split(':');
+    from = toCoord(a);
+    to = toCoord(b ?? a);
+  } else {
+    from = toCoord(af.from);
+    to = toCoord(af.to);
+  }
+  if (!from || !to) return null;
+  return {
+    r1: Math.min(from.r, to.r),
+    c1: Math.min(from.c, to.c),
+    r2: Math.max(from.r, to.r),
+    c2: Math.max(from.c, to.c),
+  };
 }

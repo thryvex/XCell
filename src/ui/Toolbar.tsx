@@ -47,6 +47,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
     recentFiles,
     requestSort,
     openAdvancedSort,
+    toggleFilter,
+    workbook,
+    activeSheetIndex,
   } = useSheetStore();
 
   const [recentMenuOpen, setRecentMenuOpen] = useState(false);
@@ -80,6 +83,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
   };
 
   const activeStyle = getActiveCellStyle();
+  const hasFilter = !!workbook.sheets[activeSheetIndex]?.filter;
 
   const handleFmtChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as NumFmt;
@@ -665,6 +669,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew, onOpen, onOpenRecent, o
       </div>
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
+
+      {/* ตัวกรอง (4C): กดซ้ำเพื่อปิด */}
+      <button
+        onClick={() => {
+          closeAllMenus();
+          toggleFilter();
+        }}
+        title={th.filter.buttonTooltip}
+        aria-pressed={hasFilter}
+        style={activeBtnStyle(hasFilter)}
+      >
+        {th.filter.button}
+      </button>
 
       {/* Sort menu (4C) */}
       <div style={{ position: 'relative', display: 'inline-block' }}>

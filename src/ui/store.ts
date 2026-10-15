@@ -9,9 +9,16 @@ import {
   createEmptyWorkbook,
   CellValue,
   ensureSheetIds,
+  ColumnFilter,
 } from '../core/model';
 import { Evaluator } from '../core/evaluator';
-import { HistoryManager, HistoryAction, snapshotWorkbook, SheetCellPatch } from '../core/history';
+import {
+  HistoryManager,
+  HistoryAction,
+  snapshotWorkbook,
+  SheetCellPatch,
+  captureFilterState,
+} from '../core/history';
 import {
   addSheet as opAddSheet,
   duplicateSheet as opDuplicateSheet,
@@ -59,6 +66,10 @@ import {
   SortKey,
   SortDirection,
 } from '../core/sort';
+import {
+  computeHiddenRows,
+  createFilter,
+} from '../core/filter';
 
 export interface SelectionState {
   r1: number;
@@ -75,6 +86,8 @@ export interface InternalClipboard {
   c2: number;
   isCut?: boolean;
   sourceSheetId?: string; // ชีตต้นทาง (สำหรับตัดข้ามชีต และวางเฉพาะค่า)
+  // key ในคลิปบอร์ด → เซลต้นทางจริง (ต่างกันเมื่อข้ามแถวที่ตัวกรองซ่อน)
+  sourceKeys?: Record<string, string>;
 }
 
 /** สถานะการมองเห็นที่แยกอิสระต่อชีต (ความกว้าง/สูง/การตรึง เก็บอยู่ใน Sheet แล้ว) */
@@ -230,6 +243,15 @@ export interface SheetState {
   updatePendingSort: (patch: Partial<Pick<PendingSort, 'hasHeader' | 'keys'>>) => void;
   confirmSort: () => void;
   cancelSort: () => void;
+
+  // Phase 4C: ตัวกรอง (แถวที่ซ่อนเกิดจากตัวกรองเท่านั้น)
+  filteredRowsNotice: boolean; // ไฟล์ที่เปิดมีแถวที่ถูกซ่อนด้วยตัวกรอง
+  toggleFilter: () => void;
+  setColumnFilter: (col: number, cf: ColumnFilter | null) => void;
+  reapplyFilter: () => void;
+  sortFilterColumn: (col: number, dir: SortDirection) => void;
+  showAllFilteredRows: () => void;
+  dismissFilteredRowsNotice: () => void;
 }
 
 export interface PendingSort {
@@ -296,6 +318,8 @@ function freshWorkbookState(wb: Workbook, activeCell = { r: 0, c: 0 }) {
     pendingDelete: null,
     pendingDeleteSheet: null,
     search: closedSearch,
+    filteredRowsNotice: false,
+    pendingSort: null,
   };
 }
 
@@ -458,8 +482,9 @@ function applyRowColOp(
     merges: JSON.parse(JSON.stringify(sheet.merges)),
     rowCount,
     colCount,
+    filterState: captureFilterState(sheet),
   };
-
+  const criteriaBefore = Object.keys(sheet.filter?.columns ?? {}).length;
   if (op === 'insert') {
     if (axis === 'row') opInsertRow(sheet, index, 1);
     else opInsertCol(sheet, index, 1);
@@ -469,6 +494,10 @@ function applyRowColOp(
   }
   const extraCellPatches = adjustOtherSheetsForRowCol(workbook, activeSheetIndex, op, axis, index, 1);
   evaluator.setWorkbook(workbook);
+  // ลบคอลัมน์ที่มีเงื่อนไขกรอง: คำนวณแถวที่ซ่อนใหม่จากเงื่อนไขที่เหลือ
+  if (sheet.filter && Object.keys(sheet.filter.columns).length !== criteriaBefore) {
+    setHiddenRows(sheet, computeHiddenRows(sheet, evaluator, activeSheetIndex));
+  }
 
   const delta = op === 'insert' ? 1 : -1;
   const newRowCount = axis === 'row' ? Math.max(1, rowCount + delta) : rowCount;
@@ -478,6 +507,7 @@ function applyRowColOp(
     merges: JSON.parse(JSON.stringify(sheet.merges)),
     rowCount: newRowCount,
     colCount: newColCount,
+    filterState: captureFilterState(sheet),
   };
 
   const descriptions = {
@@ -532,6 +562,53 @@ function runSearch(get: StoreGet, set: StoreSet, direction: 1 | -1, inclusive: b
   });
 }
 
+function rowIsHidden(sheet: Sheet, key: string): boolean {
+  const p = parseA1(key);
+  return !!p && !!sheet.hiddenRows?.includes(p.r);
+}
+
+function setHiddenRows(sheet: Sheet, rows: number[]) {
+  if (rows.length > 0) sheet.hiddenRows = [...rows].sort((a, b) => a - b);
+  else delete sheet.hiddenRows;
+}
+
+/**
+ * เปลี่ยนตัวกรองของชีตที่เปิดอยู่ + บันทึก Undo (เก็บตัวกรองและแถวที่ซ่อนทั้งก่อนและหลัง)
+ * mutate คืน false เมื่อไม่มีอะไรเปลี่ยน
+ */
+function commitFilterChange(
+  get: StoreGet,
+  set: StoreSet,
+  description: string,
+  mutate: (sheet: Sheet) => boolean
+) {
+  const { isEditing, commitEditing } = get();
+  if (isEditing) commitEditing(0, 0);
+
+  const { workbook, activeSheetIndex, history, updateTitle } = get();
+  const sheet = workbook.sheets[activeSheetIndex];
+  const before = captureFilterState(sheet);
+  if (!mutate(sheet)) return;
+  const after = captureFilterState(sheet);
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+
+  history.push({
+    description,
+    sheetIndex: activeSheetIndex,
+    patch: { filterBefore: before, filterAfter: after },
+  });
+  set({ workbook: { ...workbook }, isDirty: true });
+  updateTitle();
+}
+
+/** แถวที่มองเห็นได้ (ไม่ถูกตัวกรองซ่อน) ในช่วง r1..r2 */
+function visibleRowsInRange(sheet: Sheet, r1: number, r2: number): number[] {
+  const hidden = new Set(sheet.hiddenRows ?? []);
+  const rows: number[] = [];
+  for (let r = r1; r <= r2; r++) if (!hidden.has(r)) rows.push(r);
+  return rows;
+}
+
 /**
  * เตรียมการเรียงลำดับจากเซล/ช่วงที่เลือก: หาช่วง, ตรวจเซลผสาน, เดาหัวตาราง
  * คืน null ถ้าเรียงไม่ได้ (และแสดงข้อความถ้าจำเป็น)
@@ -575,22 +652,42 @@ function performSort(get: StoreGet, set: StoreSet, pending: PendingSort) {
     return;
   }
 
+  const filterBefore = captureFilterState(sheet);
+  const order: number[] = [];
   const patches = sortRange(
     sheet,
     evaluator,
     activeSheetIndex,
     pending.range,
     pending.keys,
-    pending.hasHeader
+    pending.hasHeader,
+    order
   );
   if (patches.length === 0) return;
+
+  // แถวย้ายที่แล้ว: ปรับแถวที่ซ่อนให้ตรงกับข้อมูล (เรียงรวมแถวที่ซ่อนอยู่ด้วย)
+  evaluator.setWorkbook(workbook);
+  let filterPatch = {};
+  if (sheet.filter && Object.keys(sheet.filter.columns).length > 0) {
+    // มีเงื่อนไข: คำนวณจากเงื่อนไขใหม่
+    setHiddenRows(sheet, computeHiddenRows(sheet, evaluator, activeSheetIndex));
+  } else if (sheet.hiddenRows && sheet.hiddenRows.length > 0) {
+    // ไม่รู้เงื่อนไข (เช่น แถวซ่อนจากไฟล์): ให้สถานะซ่อนย้ายตามแถวของมัน
+    const dataR1 = pending.hasHeader ? pending.range.r1 + 1 : pending.range.r1;
+    const hidden = new Set(sheet.hiddenRows);
+    const outside = sheet.hiddenRows.filter((r) => r < dataR1 || r > pending.range.r2);
+    const moved = order.flatMap((oldRow, i) => (hidden.has(oldRow) ? [dataR1 + i] : []));
+    setHiddenRows(sheet, [...outside, ...moved]);
+  }
+  if (JSON.stringify(filterBefore) !== JSON.stringify(captureFilterState(sheet))) {
+    filterPatch = { filterBefore, filterAfter: captureFilterState(sheet) };
+  }
 
   history.push({
     description: 'Sort range',
     sheetIndex: activeSheetIndex,
-    patch: { cellPatches: patches },
+    patch: { cellPatches: patches, ...filterPatch },
   });
-  evaluator.setWorkbook(workbook);
   const { range } = pending;
   set({
     workbook: { ...workbook },
@@ -635,6 +732,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   scrollToActiveToken: 0,
   pendingSort: null,
   notice: null,
+  filteredRowsNotice: false,
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
@@ -783,7 +881,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const sheet = workbook.sheets[activeSheetIndex];
     const patches: any[] = [];
 
+    const hiddenRows = new Set(sheet.hiddenRows ?? []);
     for (let r = selection.r1; r <= selection.r2; r++) {
+      if (hiddenRows.has(r)) continue; // ไม่แก้ข้อมูลในแถวที่ตัวกรองซ่อน
       for (let c = selection.c1; c <= selection.c2; c++) {
         const key = cellToA1(r, c);
         const cell = sheet.cells[key];
@@ -865,7 +965,9 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const sheet = workbook.sheets[activeSheetIndex];
     const patches: any[] = [];
 
+    const hiddenRows = new Set(sheet.hiddenRows ?? []);
     for (let r = selection.r1; r <= selection.r2; r++) {
+      if (hiddenRows.has(r)) continue; // ไม่แก้ข้อมูลในแถวที่ตัวกรองซ่อน
       for (let c = selection.c1; c <= selection.c2; c++) {
         const key = cellToA1(r, c);
         const cell = sheet.cells[key];
@@ -1225,6 +1327,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       isDirty: false,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: wb.unsupportedFeatures || [],
+      filteredRowsNotice: wb.sheets.some((s) => (s.hiddenRows?.length ?? 0) > 0),
       hiddenSheetNotice: wb.sheets.filter((s) => s.hidden).length,
       hasWarnedUnsupportedOverwrite: false,
     });
@@ -1537,6 +1640,105 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   cancelSort: () => set({ pendingSort: null }),
 
+  // --- Phase 4C: ตัวกรอง ---
+
+  toggleFilter: () => {
+    const { workbook, activeSheetIndex, selection, activeCell } = get();
+    const sheet = workbook.sheets[activeSheetIndex];
+
+    if (sheet.filter) {
+      // ปิดตัวกรอง: แสดงทุกแถวกลับมา
+      commitFilterChange(get, set, 'Remove filter', (s) => {
+        delete s.filter;
+        delete s.hiddenRows;
+        return true;
+      });
+      return;
+    }
+
+    const isMulti = selection.r1 !== selection.r2 || selection.c1 !== selection.c2;
+    const range: CellRange = isMulti
+      ? { ...selection }
+      : detectDataRegion(sheet, activeCell.r, activeCell.c);
+    if (!rangeHasData(sheet, range)) {
+      set({ notice: th.filter.noData });
+      return;
+    }
+
+    commitFilterChange(get, set, 'Create filter', (s) => {
+      s.filter = createFilter(range);
+      return true;
+    });
+  },
+
+  setColumnFilter: (col: number, cf: ColumnFilter | null) => {
+    const { evaluator, activeSheetIndex } = get();
+    commitFilterChange(get, set, 'Change filter', (s) => {
+      if (!s.filter) return false;
+      const columns = { ...s.filter.columns };
+      if (cf) columns[col] = cf;
+      else delete columns[col];
+      s.filter = { ...s.filter, columns };
+      setHiddenRows(s, computeHiddenRows(s, evaluator, activeSheetIndex));
+      return true;
+    });
+  },
+
+  reapplyFilter: () => {
+    const { evaluator, activeSheetIndex } = get();
+    commitFilterChange(get, set, 'Reapply filter', (s) => {
+      if (!s.filter) return false;
+      // ไม่มีเงื่อนไขที่รู้จัก (เช่น ตัวกรองจากไฟล์) → ไม่ไปแตะแถวที่ซ่อนอยู่
+      if (Object.keys(s.filter.columns).length === 0) return false;
+      setHiddenRows(s, computeHiddenRows(s, evaluator, activeSheetIndex));
+      return true;
+    });
+  },
+
+  sortFilterColumn: (col: number, dir: SortDirection) => {
+    const { workbook, activeSheetIndex } = get();
+    const filter = workbook.sheets[activeSheetIndex].filter;
+    if (!filter) return;
+    const range = { r1: filter.r1, c1: filter.c1, r2: filter.r2, c2: filter.c2 };
+    if (rangeHasMerge(workbook.sheets[activeSheetIndex], range)) {
+      set({ notice: th.sort.mergedError });
+      return;
+    }
+    set({
+      pendingSort: {
+        mode: 'quick',
+        range,
+        hasHeader: true,
+        keys: [{ col, dir }],
+        step: 'options',
+        fromFilter: true,
+      },
+    });
+    // เรียงจากเมนูตัวกรองไม่มีหน้าต่างตัวเลือก (หัวตารางคือแถวแรกของตัวกรองเสมอ)
+    get().confirmSort();
+  },
+
+  showAllFilteredRows: () => {
+    // จากแถบแจ้งไฟล์ที่มีแถวซ่อน: แสดงทุกแถวในทุกชีต (Undo ได้)
+    const { workbook, history, evaluator, activeSheetIndex, updateTitle } = get();
+    if (!workbook.sheets.some((s) => s.hiddenRows && s.hiddenRows.length > 0)) {
+      set({ filteredRowsNotice: false });
+      return;
+    }
+    const before = snapshotWorkbook(workbook);
+    before.activeSheet = activeSheetIndex;
+    for (const s of workbook.sheets) delete s.hiddenRows;
+    const after = snapshotWorkbook(workbook);
+    after.activeSheet = activeSheetIndex;
+    history.push({ description: 'Show all rows', workbookBefore: before, workbookAfter: after });
+    const nextWb = { ...workbook };
+    evaluator.setWorkbook(nextWb);
+    set({ workbook: nextWb, filteredRowsNotice: false, isDirty: true });
+    updateTitle();
+  },
+
+  dismissFilteredRowsNotice: () => set({ filteredRowsNotice: false }),
+
   getRawValue: (r: number, c: number) => {
     const { workbook, activeSheetIndex } = get();
     const key = cellToA1(r, c);
@@ -1563,18 +1765,29 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const { selection, workbook, activeSheetIndex, getDisplayValue } = get();
     const sheet = workbook.sheets[activeSheetIndex];
     const copiedCells: Record<string, Cell> = {};
+    const sourceKeys: Record<string, string> = {};
 
-    for (let r = selection.r1; r <= selection.r2; r++) {
+    // คัดลอกเฉพาะแถวที่มองเห็น (แถวที่ตัวกรองซ่อนไม่ถูกคัดลอก) แล้วต่อแถวให้ชิดกัน
+    const rows = visibleRowsInRange(sheet, selection.r1, selection.r2);
+    rows.forEach((srcR, i) => {
+      const dstR = selection.r1 + i;
       for (let c = selection.c1; c <= selection.c2; c++) {
-        const key = cellToA1(r, c);
-        if (sheet.cells[key]) {
-          copiedCells[key] = { ...sheet.cells[key] };
+        const key = cellToA1(srcR, c);
+        const cell = sheet.cells[key];
+        if (!cell) continue;
+        const copy = { ...cell };
+        if (copy.raw && copy.raw.startsWith('=') && dstR !== srcR) {
+          copy.raw = shiftFormula(copy.raw, dstR - srcR, 0);
         }
+        const compactKey = cellToA1(dstR, c);
+        copiedCells[compactKey] = copy;
+        sourceKeys[compactKey] = key;
       }
-    }
+    });
 
-    const tsv = rangeToTsv(sheet, selection, getDisplayValue);
-    const html = rangeToHtml(sheet, selection, getDisplayValue);
+    const skipRows = new Set(sheet.hiddenRows ?? []);
+    const tsv = rangeToTsv(sheet, selection, getDisplayValue, skipRows);
+    const html = rangeToHtml(sheet, selection, getDisplayValue, skipRows);
 
     if (navigator?.clipboard?.write) {
       const textBlob = new Blob([tsv], { type: 'text/plain' });
@@ -1592,9 +1805,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         cells: copiedCells,
         r1: selection.r1,
         c1: selection.c1,
-        r2: selection.r2,
+        r2: selection.r1 + Math.max(0, rows.length - 1),
         c2: selection.c2,
         isCut: false,
+        sourceKeys,
         sourceSheetId: workbook.sheets[activeSheetIndex]?.id,
       },
       cutRange: null,
@@ -1626,76 +1840,80 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
     const sheet = workbook.sheets[activeSheetIndex];
     const patches: any[] = [];
+    // แถวที่ตัวกรองซ่อนอยู่จะไม่ถูกเขียนทับ: วางลงเฉพาะแถวที่มองเห็น ตามลำดับ
+    const hidden = new Set(sheet.hiddenRows ?? []);
+    const visibleRowFrom = (start: number, offset: number): number => {
+      let r = start;
+      let seen = -1;
+      while (true) {
+        if (!hidden.has(r)) seen++;
+        if (seen === offset) return r;
+        r++;
+      }
+    };
+
+    const writeCell = (destR: number, destC: number, cell: Cell | undefined, rawVal: string) => {
+      const destKey = cellToA1(destR, destC);
+      const prev = sheet.cells[destKey] ? { ...sheet.cells[destKey] } : undefined;
+      sheet.cells[destKey] = {
+        raw: rawVal,
+        fmt: valuesOnly ? prev?.fmt : cell?.fmt,
+        style: valuesOnly
+          ? prev?.style
+            ? { ...prev.style }
+            : undefined
+          : cell?.style
+            ? { ...cell.style }
+            : undefined,
+      };
+      evaluator.invalidate(destKey, activeSheetIndex);
+      patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
+    };
 
     if (clipboard && Object.keys(clipboard.cells).length > 0) {
-      const dr = activeCell.r - clipboard.r1;
-      const dc = activeCell.c - clipboard.c1;
       // ชีตต้นทางของคลิปบอร์ด (อาจเป็นชีตอื่น) ใช้คำนวณค่าตอนวางเฉพาะค่า และล้างเซลตอนตัด
       const srcIndex = clipboard.sourceSheetId
         ? workbook.sheets.findIndex((s) => s.id === clipboard.sourceSheetId) // -1 = ชีตต้นทางถูกลบไปแล้ว
         : activeSheetIndex;
       const valueSheetIndex = srcIndex >= 0 ? srcIndex : activeSheetIndex;
+      const originalKey = (key: string) => clipboard.sourceKeys?.[key] ?? key;
+      const dc = activeCell.c - clipboard.c1;
 
       // Check if copying single cell into multi-cell target selection
       const isSingleCopied = clipboard.r1 === clipboard.r2 && clipboard.c1 === clipboard.c2;
       const isTargetMulti = selection.r1 !== selection.r2 || selection.c1 !== selection.c2;
 
       if (isSingleCopied && isTargetMulti) {
-        const srcCell = clipboard.cells[cellToA1(clipboard.r1, clipboard.c1)];
+        const srcKey = cellToA1(clipboard.r1, clipboard.c1);
+        const srcCell = clipboard.cells[srcKey];
         for (let r = selection.r1; r <= selection.r2; r++) {
+          if (hidden.has(r)) continue;
           for (let c = selection.c1; c <= selection.c2; c++) {
-            const destKey = cellToA1(r, c);
-            const prev = sheet.cells[destKey] ? { ...sheet.cells[destKey] } : undefined;
-
             let rawVal = srcCell ? srcCell.raw : '';
             if (rawVal.startsWith('=')) {
-              if (valuesOnly) {
-                rawVal = String(evaluator.getCellValue(cellToA1(clipboard.r1, clipboard.c1), valueSheetIndex));
-              } else {
-                rawVal = shiftFormula(rawVal, r - clipboard.r1, c - clipboard.c1);
-              }
+              rawVal = valuesOnly
+                ? String(evaluator.getCellValue(originalKey(srcKey), valueSheetIndex))
+                : shiftFormula(rawVal, r - clipboard.r1, c - clipboard.c1);
             }
-
-            sheet.cells[destKey] = {
-              raw: rawVal,
-              fmt: valuesOnly ? prev?.fmt : srcCell?.fmt,
-              style: valuesOnly
-                ? (prev?.style ? { ...prev.style } : undefined)
-                : (srcCell?.style ? { ...srcCell.style } : undefined),
-            };
-            evaluator.invalidate(destKey, activeSheetIndex);
-            patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
+            writeCell(r, c, srcCell, rawVal);
           }
         }
       } else {
-        // Normal paste with dr, dc
+        // Normal paste: แถวที่ i ของคลิปบอร์ดไปที่แถวที่มองเห็นลำดับที่ i นับจากเซลปัจจุบัน
         for (const [srcKey, cell] of Object.entries(clipboard.cells)) {
           const p = parseA1(srcKey);
           if (!p) continue;
 
-          const destR = p.r + dr;
+          const destR = visibleRowFrom(activeCell.r, p.r - clipboard.r1);
           const destC = p.c + dc;
-          const destKey = cellToA1(destR, destC);
-          const prev = sheet.cells[destKey] ? { ...sheet.cells[destKey] } : undefined;
 
           let rawVal = cell.raw;
           if (rawVal.startsWith('=')) {
-            if (valuesOnly) {
-              rawVal = String(evaluator.getCellValue(srcKey, valueSheetIndex));
-            } else {
-              rawVal = shiftFormula(rawVal, dr, dc);
-            }
+            rawVal = valuesOnly
+              ? String(evaluator.getCellValue(originalKey(srcKey), valueSheetIndex))
+              : shiftFormula(rawVal, destR - p.r, dc);
           }
-
-          sheet.cells[destKey] = {
-            raw: rawVal,
-            fmt: valuesOnly ? prev?.fmt : cell.fmt,
-            style: valuesOnly
-              ? (prev?.style ? { ...prev.style } : undefined)
-              : (cell.style ? { ...cell.style } : undefined),
-          };
-          evaluator.invalidate(destKey, activeSheetIndex);
-          patches.push({ key: destKey, before: prev, after: { ...sheet.cells[destKey] } });
+          writeCell(destR, destC, cell, rawVal);
         }
       }
 
@@ -1704,7 +1922,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       if (clipboard.isCut && srcIndex >= 0) {
         const srcSheet = workbook.sheets[srcIndex];
         const sameSheet = srcIndex === activeSheetIndex;
-        for (const srcKey of Object.keys(clipboard.cells)) {
+        for (const key of Object.keys(clipboard.cells)) {
+          const srcKey = originalKey(key);
           if (!srcSheet.cells[srcKey]) continue;
           if (sameSheet && patches.some((p) => p.key === srcKey)) continue;
           const patch = { key: srcKey, before: { ...srcSheet.cells[srcKey] }, after: undefined };
@@ -1743,15 +1962,12 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         if (grid.length === 0) return;
 
         for (let i = 0; i < grid.length; i++) {
+          const destR = visibleRowFrom(activeCell.r, i);
           for (let j = 0; j < grid[i].length; j++) {
-            const destR = activeCell.r + i;
-            const destC = activeCell.c + j;
-            const destKey = cellToA1(destR, destC);
+            const destKey = cellToA1(destR, activeCell.c + j);
             const prev = sheet.cells[destKey] ? { ...sheet.cells[destKey] } : undefined;
-            const rawVal = grid[i][j];
-
             sheet.cells[destKey] = {
-              raw: rawVal,
+              raw: grid[i][j],
               fmt: prev?.fmt,
               style: prev?.style ? { ...prev.style } : undefined,
             };
@@ -1876,6 +2092,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
     const patches: any[] = [];
     for (const [key, cell] of Object.entries(fillResult.cellsToSet)) {
+      if (rowIsHidden(sheet, key)) continue; // ไม่เติมลงแถวที่ตัวกรองซ่อน
       const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
       sheet.cells[key] = { ...cell };
       evaluator.invalidate(key, activeSheetIndex);
@@ -1904,6 +2121,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
     const patches: any[] = [];
     for (const [key, cell] of Object.entries(res)) {
+      if (rowIsHidden(sheet, key)) continue; // ไม่เติมลงแถวที่ตัวกรองซ่อน
       const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
       sheet.cells[key] = { ...cell };
       evaluator.invalidate(key, activeSheetIndex);
@@ -1928,6 +2146,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
     const patches: any[] = [];
     for (const [key, cell] of Object.entries(res)) {
+      if (rowIsHidden(sheet, key)) continue; // ไม่เติมลงแถวที่ตัวกรองซ่อน
       const prev = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
       sheet.cells[key] = { ...cell };
       evaluator.invalidate(key, activeSheetIndex);

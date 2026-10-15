@@ -182,7 +182,8 @@ export function sortRange(
   sheetIndex: number,
   range: CellRange,
   keys: SortKey[],
-  hasHeader: boolean
+  hasHeader: boolean,
+  orderOut?: number[] // (ไม่บังคับ) รับลำดับแถวเดิมของแต่ละตำแหน่งใหม่
 ): CellPatch[] {
   const dataR1 = hasHeader ? range.r1 + 1 : range.r1;
   if (dataR1 >= range.r2 || keys.length === 0) return [];
@@ -213,6 +214,7 @@ export function sortRange(
   }
 
   const patches: CellPatch[] = [];
+  if (orderOut) orderOut.push(...rows.map((x) => x.row));
   rows.forEach(({ row: oldRow }, i) => {
     const newRow = dataR1 + i;
     for (let c = range.c1; c <= range.c2; c++) {

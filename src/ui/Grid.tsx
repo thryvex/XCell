@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallba
 import { useSheetStore, SelectionState } from './store';
 import { Cell } from './Cell';
 import { ContextMenu, ContextMenuTarget } from './ContextMenu';
+import { FilterMenu } from './FilterMenu';
 import { colToStr, cellToA1, parseRange } from '../core/address';
 import { tokenize } from '../core/tokenizer';
 import { sameSheetName, formatSheetReference } from '../core/sheetName';
@@ -84,10 +85,24 @@ export const Grid: React.FC = () => {
     scrollToActiveToken,
     requestSort,
     openAdvancedSort,
+    toggleFilter,
   } = useSheetStore();
 
   const sheet = workbook.sheets[activeSheetIndex];
   const sheetId = sheet.id;
+
+  // แถวที่ซ่อนด้วยตัวกรอง (4C)
+  const hiddenSet = useMemo(() => new Set(sheet.hiddenRows ?? []), [sheet.hiddenRows]);
+  // แถวถัดไป/ก่อนหน้าที่มองเห็น (ข้ามแถวที่ซ่อน) สำหรับลูกศร/Enter
+  const stepRow = useCallback(
+    (from: number, dir: 1 | -1) => {
+      let r = from + dir;
+      while (r >= 0 && r < rowCount && hiddenSet.has(r)) r += dir;
+      return r < 0 || r >= rowCount ? from : r;
+    },
+    [hiddenSet, rowCount]
+  );
+  const [filterMenu, setFilterMenu] = useState<{ col: number; x: number; y: number } | null>(null);
   // ชีตของเซลที่กำลังแก้สูตร (point mode ข้ามชีต: ชีตที่แสดงอาจไม่ใช่ชีตนี้)
   const editingSheet = editingSheetIndex !== null ? workbook.sheets[editingSheetIndex] : undefined;
   const editingSheetName = editingSheet?.name ?? sheet.name;
@@ -349,6 +364,13 @@ export const Grid: React.FC = () => {
         return;
       }
 
+      // Ctrl+Shift+L เปิด/ปิดตัวกรอง
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        toggleFilter();
+        return;
+      }
+
       if (isCtrl && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         selectAll();
@@ -357,10 +379,10 @@ export const Grid: React.FC = () => {
 
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveCell(activeCell.r - 1, activeCell.c, e.shiftKey);
+        setActiveCell(stepRow(activeCell.r, -1), activeCell.c, e.shiftKey);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveCell(activeCell.r + 1, activeCell.c, e.shiftKey);
+        setActiveCell(stepRow(activeCell.r, 1), activeCell.c, e.shiftKey);
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         setActiveCell(activeCell.r, activeCell.c - 1, e.shiftKey);
@@ -372,7 +394,7 @@ export const Grid: React.FC = () => {
         setActiveCell(activeCell.r, activeCell.c + (e.shiftKey ? -1 : 1), false);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        setActiveCell(activeCell.r + (e.shiftKey ? -1 : 1), activeCell.c, false);
+        setActiveCell(stepRow(activeCell.r, e.shiftKey ? -1 : 1), activeCell.c, false);
       } else if (e.key === 'F2') {
         e.preventDefault();
         startEditing();
@@ -412,6 +434,8 @@ export const Grid: React.FC = () => {
     searchNext,
     searchPrev,
     prevSheet,
+    stepRow,
+    toggleFilter,
   ]);
 
   // Point mode cell click / regular selection
@@ -638,6 +662,7 @@ export const Grid: React.FC = () => {
 
     let top = HEADER_ROW_HEIGHT;
     for (let r = 0; r < activeCell.r; r++) {
+      if (hiddenSet.has(r)) continue;
       top += sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
     }
 
@@ -652,7 +677,7 @@ export const Grid: React.FC = () => {
       height: `${height}px`,
       zIndex: 10,
     };
-  }, [isEditing, activeCell, sheet.colWidths, sheet.rowHeights]);
+  }, [isEditing, activeCell, sheet.colWidths, sheet.rowHeights, hiddenSet]);
 
   // Position of fill handle at bottom-right corner of selection
   const fillHandleStyle = useMemo(() => {
@@ -663,6 +688,7 @@ export const Grid: React.FC = () => {
 
     let top = HEADER_ROW_HEIGHT;
     for (let r = 0; r <= selection.r2; r++) {
+      if (hiddenSet.has(r)) continue;
       top += sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
     }
 
@@ -677,7 +703,7 @@ export const Grid: React.FC = () => {
       cursor: 'crosshair',
       zIndex: 8,
     };
-  }, [selection, sheet.colWidths, sheet.rowHeights]);
+  }, [selection, sheet.colWidths, sheet.rowHeights, hiddenSet]);
 
   return (
     <div
@@ -847,6 +873,7 @@ export const Grid: React.FC = () => {
           <tbody>
             {Array.from({ length: rowCount }, (_, r) => {
               const height = sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
+              if (hiddenSet.has(r)) return null; // แถวที่ตัวกรองซ่อน (เลขแถวที่เหลือเป็นเลขจริง)
               const isRowSelected =
                 r >= selection.r1 &&
                 r <= selection.r2 &&
@@ -939,6 +966,15 @@ export const Grid: React.FC = () => {
                         isUnsupportedFormula={Boolean(cellData?.unsupportedFormula)}
                         highlightColor={highlightColor}
                         searchHighlight={searchCells.get(a1)}
+                        filterButton={
+                          sheet.filter && r === sheet.filter.r1 && c >= sheet.filter.c1 && c <= sheet.filter.c2
+                            ? {
+                                active: c in sheet.filter.columns,
+                                title: th.filter.headerButtonTooltip,
+                                onOpen: (x, y) => setFilterMenu({ col: c, x, y }),
+                              }
+                            : undefined
+                        }
                         style={cellData?.style}
                         rowSpan={merge ? merge.r2 - merge.r1 + 1 : undefined}
                         colSpan={merge ? merge.c2 - merge.c1 + 1 : undefined}
@@ -1005,6 +1041,16 @@ export const Grid: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* เมนูตัวกรองของคอลัมน์ (4C) */}
+      {filterMenu && (
+        <FilterMenu
+          col={filterMenu.col}
+          x={filterMenu.x}
+          y={filterMenu.y}
+          onClose={() => setFilterMenu(null)}
+        />
+      )}
 
       {/* Context Menu */}
       {contextMenuPos && (

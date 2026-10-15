@@ -1,4 +1,4 @@
-import { Workbook, Sheet, Cell, MergeRange } from './model';
+import { Workbook, Sheet, Cell, MergeRange, SheetFilter } from './model';
 
 export interface CellPatch {
   key: string;
@@ -19,6 +19,8 @@ export interface FullSheetSnapshot {
   frozenRows?: number;
   frozenCols?: number;
   rowCount?: number;
+  // ตัวกรองและแถวที่ซ่อน (4C): undefined = ไม่มี
+  filterState?: FilterState;
   colCount?: number;
 }
 
@@ -28,6 +30,29 @@ export interface SheetPatch {
   mergesAfter?: MergeRange[];
   fullSheetBefore?: FullSheetSnapshot;
   fullSheetAfter?: FullSheetSnapshot;
+  // เปิด/ปิด/เปลี่ยนเงื่อนไขตัวกรอง (4C)
+  filterBefore?: FilterState;
+  filterAfter?: FilterState;
+}
+
+/** ตัวกรองและแถวที่ซ่อนของชีต (เก็บคู่กันเสมอ) */
+export interface FilterState {
+  filter?: SheetFilter;
+  hiddenRows?: number[];
+}
+
+export function captureFilterState(sheet: Sheet): FilterState {
+  return JSON.parse(
+    JSON.stringify({ filter: sheet.filter, hiddenRows: sheet.hiddenRows })
+  ) as FilterState;
+}
+
+function applyFilterState(sheet: Sheet, state: FilterState) {
+  const copy = JSON.parse(JSON.stringify(state)) as FilterState;
+  if (copy.filter) sheet.filter = copy.filter;
+  else delete sheet.filter;
+  if (copy.hiddenRows && copy.hiddenRows.length > 0) sheet.hiddenRows = copy.hiddenRows;
+  else delete sheet.hiddenRows;
 }
 
 export interface WorkbookSnapshot {
@@ -62,6 +87,7 @@ function applySnapshot(sheet: Sheet, snap: FullSheetSnapshot) {
   if (snap.rowHeights) sheet.rowHeights = { ...snap.rowHeights };
   if (snap.frozenRows !== undefined) sheet.frozenRows = snap.frozenRows;
   if (snap.frozenCols !== undefined) sheet.frozenCols = snap.frozenCols;
+  if (snap.filterState) applyFilterState(sheet, snap.filterState);
 }
 
 function applyCellPatches(sheet: Sheet, patches: CellPatch[], direction: 'before' | 'after') {
@@ -139,6 +165,8 @@ export class HistoryManager {
           if (merges !== undefined) {
             sheet.merges = [...merges];
           }
+          const filterState = direction === 'before' ? action.patch.filterBefore : action.patch.filterAfter;
+          if (filterState) applyFilterState(sheet, filterState);
         }
       }
     }

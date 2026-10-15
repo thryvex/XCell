@@ -41,6 +41,9 @@ export const App: React.FC = () => {
     restoreRecoveryWorkbook,
     unsupportedFeatures,
     hiddenSheetNotice,
+    filteredRowsNotice,
+    showAllFilteredRows,
+    dismissFilteredRowsNotice,
     hasWarnedUnsupportedOverwrite,
     setHasWarnedUnsupportedOverwrite,
     dismissUnsupportedBanner,
@@ -614,6 +617,37 @@ export const App: React.FC = () => {
               }}
               onClick={dismissUnsupportedBanner}
               title={th.banner.dismiss}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ไฟล์ที่เปิดมีแถวที่ซ่อนด้วยตัวกรอง (เงื่อนไขกรองไม่ถูกเก็บใน .xlsx) */}
+      {filteredRowsNotice && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: '#e0f2fe',
+            color: '#075985',
+            borderBottom: '1px solid #7dd3fc',
+            padding: '7px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+          }}
+        >
+          <span>ℹ️ {th.filter.fileHasFilteredRows}</span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={showAllFilteredRows} style={{ fontSize: '12px', fontWeight: 600 }}>
+              {th.filter.showAllRows}
+            </button>
+            <button
+              onClick={dismissFilteredRowsNotice}
+              title={th.banner.dismiss}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
             >
               ✕
             </button>

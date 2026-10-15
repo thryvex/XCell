@@ -3,9 +3,13 @@ import { th } from '../i18n/th';
 import { useSheetStore } from './store';
 import { cellToA1 } from '../core/address';
 import { formatNumberWithCommas } from '../core/numfmt';
+import { filterDataRowCount } from '../core/filter';
 
 export const StatusBar: React.FC = () => {
-  const { selection, getComputedValue, isDirty } = useSheetStore();
+  const { selection, getComputedValue, isDirty, workbook, activeSheetIndex } = useSheetStore();
+  const sheet = workbook.sheets[activeSheetIndex];
+  const filter = sheet?.filter;
+  const hiddenRows = sheet?.hiddenRows;
 
   const isSingleCell = selection.r1 === selection.r2 && selection.c1 === selection.c2;
   const rangeText = isSingleCell
@@ -16,7 +20,10 @@ export const StatusBar: React.FC = () => {
     const numbers: number[] = [];
     let count = 0;
 
+    // รวม/เฉลี่ย/นับ ของช่วงที่เลือก นับเฉพาะแถวที่มองเห็น (แถวที่ตัวกรองซ่อนไม่นับ)
+    const hidden = new Set(hiddenRows ?? []);
     for (let r = selection.r1; r <= selection.r2; r++) {
+      if (hidden.has(r)) continue;
       for (let c = selection.c1; c <= selection.c2; c++) {
         const val = getComputedValue(r, c);
         if (val !== '' && val !== null && val !== undefined) {
@@ -44,7 +51,7 @@ export const StatusBar: React.FC = () => {
       min: formatNumberWithCommas(min, 2),
       max: formatNumberWithCommas(max, 2),
     };
-  }, [selection, getComputedValue]);
+  }, [selection, getComputedValue, hiddenRows]);
 
   return (
     <div
@@ -61,6 +68,14 @@ export const StatusBar: React.FC = () => {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <span>{rangeText ? th.statusBar.selection.replace('{range}', rangeText) : ''}</span>
+
+        {filter && (
+          <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>
+            {th.filter.statusFiltered
+              .replace('{shown}', String(filterDataRowCount(filter) - (hiddenRows?.length ?? 0)))
+              .replace('{total}', String(filterDataRowCount(filter)))}
+          </span>
+        )}
 
         {stats ? (
           <span style={{ color: 'var(--fg-main)', fontWeight: 500 }}>
