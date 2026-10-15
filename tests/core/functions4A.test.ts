@@ -4,7 +4,7 @@ import { convertShorthand } from '../../src/core/shorthand';
 import { dateToSerial, serialToDate } from '../../src/core/numfmt';
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../../src/core/xlsx';
 import { createEmptyWorkbook, createEmptySheet } from '../../src/core/model';
-import { Sheet, CellValue } from '../../src/types/sheet';
+import { Sheet, CellValue } from '../../src/core/model';
 
 function createSheetWithGrid(data: Record<string, string | number>): Sheet {
   const sheet = createEmptySheet();

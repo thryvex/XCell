@@ -447,7 +447,7 @@ export const FUNCTIONS: Record<string, FunctionImpl> = {
 
   NOT: (val: any): CellValue => {
     if (isCellError(val)) return val;
-    if (val === true || (typeof v === 'number' && val !== 0) || val === 'TRUE') {
+    if (val === true || (typeof val === 'number' && val !== 0) || val === 'TRUE') {
       return false;
     }
     return true;

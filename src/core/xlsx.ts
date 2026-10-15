@@ -436,6 +436,7 @@ export async function exportToXlsxBuffer(wb: Workbook): Promise<Uint8Array> {
  */
 export async function importFromXlsxBuffer(data: Uint8Array): Promise<Workbook> {
   const excelWb = new ExcelJS.Workbook();
-  await excelWb.xlsx.load(data);
+  // ExcelJS รับ Uint8Array ได้จริง แต่ type ประกาศเป็น Buffer ของ Node
+  await excelWb.xlsx.load(data as unknown as Parameters<typeof excelWb.xlsx.load>[0]);
   return await excelJSToWorkbook(excelWb);
 }

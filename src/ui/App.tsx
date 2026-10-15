@@ -220,7 +220,7 @@ export const App: React.FC = () => {
         return false;
       } else {
         // Fallback for browser download
-        const blob = new Blob([buffer], {
+        const blob = new Blob([new Uint8Array(buffer)], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         });
         const url = URL.createObjectURL(blob);

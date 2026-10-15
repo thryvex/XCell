@@ -208,7 +208,7 @@
 
 ## 3. บั๊กที่รู้แต่ยังไม่แก้ (Known Issues)
 
-- Type error ที่มีอยู่ก่อน 4B (เทสต์ Vitest ไม่ตรวจ type จึงไม่เห็น): `functions.ts:450` ใช้ตัวแปร `v` ที่ไม่มี, `Dialogs.tsx:130` ใช้ข้อความ `unsavedChangesTitle` ที่ไม่มีใน `th.ts`, `xlsx.ts`/`App.tsx` ชนิด `Uint8Array`, `tests/core/functions4A.test.ts` import `src/types/sheet` ที่ไม่มี — ยังไม่ได้แก้ รอเจ้าของโปรเจกต์ตัดสินใจ
+- (แก้แล้ว) type error ที่ค้างจากก่อน 4B ทั้ง 5 จุด: `tsc --noEmit` ผ่านไม่มี error; ในนั้นมีบั๊กจริง 2 จุด คือ `NOT()` ใช้ตัวแปร `v` ที่ไม่มี ทำให้ `NOT(5)` ได้ TRUE ผิด และหัวกล่อง "ยังไม่ได้บันทึก" แสดงว่างเพราะไม่มีข้อความ `unsavedChangesTitle` ใน `th.ts`
 - ตารางคีย์ลัดในหน้า "ช่วยเหลือ" ยังไม่มี `Ctrl+PageUp/PageDown` และข้อความในตารางนั้น hardcode ใน `HelpModal.tsx` (ของเดิม)
 - ตัด (Ctrl+X) แล้ววาง: reference ที่ชี้เซลที่ถูกย้ายยังไม่ตามไป (SPEC 4.5 ข้อ 2) ทั้งในชีตเดียวและข้ามชีต (ของเดิม)
 - ตาราง render ทุกแถว ไม่ได้ทำ virtual scrolling จริง (ของเดิม)
