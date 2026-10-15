@@ -235,25 +235,6 @@ export const SheetTabs: React.FC = () => {
                       width: '120px',
                     }}
                   />
-                  {renameError && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        bottom: '28px',
-                        left: 0,
-                        backgroundColor: '#ef4444',
-                        color: '#ffffff',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        whiteSpace: 'nowrap',
-                        zIndex: 100,
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                      }}
-                    >
-                      {renameError}
-                    </div>
-                  )}
                 </div>
               ) : (
                 <span>{sheet.name}</span>
@@ -262,6 +243,23 @@ export const SheetTabs: React.FC = () => {
           );
         })}
       </div>
+
+      {/* ข้อความเตือนชื่อชีตผิดกฎ: แสดงในแถบ (กล่องลอยถูกตัดโดยแถบแท็บที่เลื่อนได้) */}
+      {renameError && (
+        <span
+          role="alert"
+          style={{
+            color: '#dc2626',
+            fontSize: '12px',
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            paddingRight: '8px',
+          }}
+        >
+          ⚠ {renameError}
+        </span>
+      )}
 
       {/* Context Menu for Sheet Tabs */}
       {contextMenu && (

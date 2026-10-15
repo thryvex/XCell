@@ -4,7 +4,7 @@ import { Cell } from './Cell';
 import { ContextMenu, ContextMenuTarget } from './ContextMenu';
 import { colToStr, cellToA1, parseRange } from '../core/address';
 import { tokenize } from '../core/tokenizer';
-import { sameSheetName } from '../core/sheetName';
+import { sameSheetName, formatSheetReference } from '../core/sheetName';
 import { MergeRange } from '../core/model';
 import { th } from '../i18n/th';
 
@@ -33,6 +33,7 @@ export const Grid: React.FC = () => {
     selection,
     isEditing,
     editingValue,
+    editingSheetIndex,
     rowCount,
     colCount,
     cutRange,
@@ -80,8 +81,10 @@ export const Grid: React.FC = () => {
 
   const sheet = workbook.sheets[activeSheetIndex];
   const sheetId = sheet.id;
-  // ชีตของเซลที่กำลังแก้สูตร (ขั้น 3: point mode ข้ามชีตจะต่างจากชีตที่แสดงได้)
-  const editingSheetName = sheet.name;
+  // ชีตของเซลที่กำลังแก้สูตร (point mode ข้ามชีต: ชีตที่แสดงอาจไม่ใช่ชีตนี้)
+  const editingSheet = editingSheetIndex !== null ? workbook.sheets[editingSheetIndex] : undefined;
+  const editingSheetName = editingSheet?.name ?? sheet.name;
+  const isOnEditingSheet = editingSheetIndex === null || editingSheetIndex === activeSheetIndex;
 
   // แสดงกรอบ "ตัด" เฉพาะบนชีตต้นทาง
   const visibleCutRange =
@@ -112,6 +115,7 @@ export const Grid: React.FC = () => {
   // Point mode drag state
   const [pointModeAnchor, setPointModeAnchor] = useState<{ r: number; c: number } | null>(null);
   const [pointModeBaseFormula, setPointModeBaseFormula] = useState<string>('');
+  const [pointModePrefix, setPointModePrefix] = useState<string>('');
 
   // Precompute merge maps
   const { anchorMap, coveredMap } = useMemo(() => {
@@ -170,10 +174,10 @@ export const Grid: React.FC = () => {
 
   // Focus input when editing starts
   useEffect(() => {
-    if (isEditing && inputRef.current) {
+    if (isEditing && isOnEditingSheet && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isEditing]);
+  }, [isEditing, isOnEditingSheet]);
 
   // Check if cursor in editing formula is ready for Point Mode reference insertion
   const isPointModeReady = useCallback(() => {
@@ -194,6 +198,16 @@ export const Grid: React.FC = () => {
       }
 
       if (isEditing) return;
+
+      // ไม่แย่งคีย์จากช่องพิมพ์อื่น (เช่น ช่องเปลี่ยนชื่อแท็บชีต, แถบสูตร)
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target !== inputRef.current &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
 
       const isCtrl = e.ctrlKey || e.metaKey;
 
@@ -343,10 +357,20 @@ export const Grid: React.FC = () => {
 
     if (isEditing && isPointModeReady()) {
       // Point mode: insert reference into formula and allow range drag
+      // ถ้ากำลังดูชีตอื่น ใส่ชื่อชีตนำหน้า เช่น 'ชีต2'!A1
       e.preventDefault();
+      const prefix = isOnEditingSheet ? '' : `${formatSheetReference(sheet.name)}!`;
       setPointModeAnchor({ r, c });
       setPointModeBaseFormula(editingValue);
-      setEditingValue(editingValue + cellToA1(r, c));
+      setPointModePrefix(prefix);
+      setEditingValue(editingValue + prefix + cellToA1(r, c));
+      return;
+    }
+
+    if (isEditing && !isOnEditingSheet) {
+      // ไม่อยู่ในตำแหน่งที่รับ reference ได้ = ยืนยันการแก้ไข แล้วกลับชีตเดิม
+      e.preventDefault();
+      commitEditing(0, 0);
       return;
     }
 
@@ -369,7 +393,7 @@ export const Grid: React.FC = () => {
         r1 === r2 && c1 === c2
           ? cellToA1(r, c)
           : `${cellToA1(r1, c1)}:${cellToA1(r2, c2)}`;
-      setEditingValue(pointModeBaseFormula + refStr);
+      setEditingValue(pointModeBaseFormula + pointModePrefix + refStr);
       return;
     }
 
@@ -424,6 +448,7 @@ export const Grid: React.FC = () => {
     if (pointModeAnchor) {
       setPointModeAnchor(null);
       setPointModeBaseFormula('');
+      setPointModePrefix('');
     }
     if (isFillDragging && fillTarget) {
       applyFillRange(fillTarget);
@@ -453,7 +478,7 @@ export const Grid: React.FC = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [resizingCol, resizingRow, isFillDragging, fillTarget, setColWidth, setRowHeight]);
+  }, [resizingCol, resizingRow, isFillDragging, fillTarget, pointModeAnchor, setColWidth, setRowHeight]);
 
   // Context Menu triggers
   const handleCellContextMenu = (r: number, c: number, e: React.MouseEvent) => {
@@ -614,7 +639,7 @@ export const Grid: React.FC = () => {
         )}
 
         {/* In-place editor */}
-        {isEditing && (
+        {isEditing && isOnEditingSheet && (
           <input
             ref={inputRef}
             style={{

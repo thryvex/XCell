@@ -35,7 +35,8 @@ describe('src/core/xlsx Durability & Unsupported Features (SPEC 6.4)', () => {
 
     const detected = detectUnsupportedFeatures(wb);
 
-    expect(detected).toContain('แผ่นงานที่ซ่อนอยู่ (Hidden Sheets)');
+    // 4B: ชีตซ่อนรองรับแล้ว (เก็บไว้ตามเดิม) จึงไม่อยู่ในรายการส่วนที่ไม่รองรับอีกต่อไป
+    expect(detected).not.toContain('แผ่นงานที่ซ่อนอยู่ (Hidden Sheets)');
     expect(detected).toContain('การจัดรูปแบบตามเงื่อนไข (Conditional Formatting)');
     expect(detected).toContain('การตรวจสอบความถูกต้องของข้อมูล (Data Validation)');
     expect(detected).toContain('ตาราง Pivot');

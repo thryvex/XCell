@@ -81,6 +81,9 @@ export interface SheetState {
   activeCell: { r: number; c: number };
   selection: SelectionState;
   isEditing: boolean;
+  // ชีตและเซลที่กำลังแก้ไข (ระหว่าง point mode ข้ามชีต ชีตที่แสดงอาจไม่ใช่ชีตนี้)
+  editingSheetIndex: number | null;
+  editingCell: { r: number; c: number } | null;
   editingValue: string;
   filePath: string | null;
   fileName: string;
@@ -168,6 +171,7 @@ export interface SheetState {
   clearRecoverySnapshot: () => Promise<void>;
   restoreRecoveryWorkbook: (recoveredWb: Workbook, origPath: string | null) => void;
   unsupportedFeatures: string[];
+  hiddenSheetNotice: number; // จำนวนชีตซ่อนในไฟล์ที่เปิด (แสดงในแถบแจ้งเตือน)
   hasWarnedUnsupportedOverwrite: boolean;
   setHasWarnedUnsupportedOverwrite: (warned: boolean) => void;
   dismissUnsupportedBanner: () => void;
@@ -220,8 +224,7 @@ function freshWorkbookState(wb: Workbook, activeCell = { r: 0, c: 0 }) {
     rowCount: view.rowCount,
     colCount: view.colCount,
     sheetViews: { [wb.sheets[activeSheetIndex].id!]: view } as Record<string, SheetView>,
-    isEditing: false,
-    editingValue: '',
+    ...endEditingState,
     evaluator: new Evaluator(wb),
     history: new HistoryManager(100),
     clipboard: null,
@@ -270,6 +273,30 @@ function viewStateFor(wb: Workbook, index: number, views: Record<string, SheetVi
   };
 }
 
+const endEditingState = {
+  isEditing: false,
+  editingValue: '',
+  editingSheetIndex: null,
+  editingCell: null,
+};
+
+/**
+ * ถ้ากำลังดูชีตอื่นระหว่าง point mode ให้กลับไปชีตและเซลที่กำลังแก้สูตรอยู่
+ */
+function returnToEditingSheet(get: StoreGet, set: StoreSet) {
+  const { editingSheetIndex, editingCell, activeSheetIndex, workbook } = get();
+  if (editingSheetIndex === null || editingSheetIndex === activeSheetIndex) return;
+  if (!workbook.sheets[editingSheetIndex]) return;
+
+  const views = captureView(get);
+  workbook.activeSheet = editingSheetIndex;
+  const viewState = viewStateFor(workbook, editingSheetIndex, views);
+  if (editingCell) {
+    viewState.activeCell = { ...editingCell };
+  }
+  set({ ...viewState, sheetViews: views });
+}
+
 /** หลัง Undo/Redo: คำนวณใหม่ทั้งสมุดงาน และสลับไปชีตที่ได้รับผลกระทบ */
 function finishHistoryStep(
   get: StoreGet,
@@ -296,8 +323,7 @@ function finishHistoryStep(
     ...(full?.rowCount !== undefined ? { rowCount: full.rowCount } : {}),
     ...(full?.colCount !== undefined ? { colCount: full.colCount } : {}),
     sheetViews: views,
-    isEditing: false,
-    editingValue: '',
+    ...endEditingState,
     isDirty: true,
   });
   updateTitle();
@@ -422,6 +448,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   activeCell: { r: 0, c: 0 },
   selection: { r1: 0, c1: 0, r2: 0, c2: 0 },
   isEditing: false,
+  editingSheetIndex: null,
+  editingCell: null,
   editingValue: '',
   filePath: null,
   fileName: 'ตารางบันทึก',
@@ -437,6 +465,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   recentFiles: [],
   recoverySessionId: `recovery-${Date.now()}`,
   unsupportedFeatures: [],
+  hiddenSheetNotice: 0,
   hasWarnedUnsupportedOverwrite: false,
   sheetViews: { [initialWb.sheets[0].id!]: defaultSheetView() },
   pendingDeleteSheet: null,
@@ -496,6 +525,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     set({
       isEditing: true,
       editingValue: val,
+      editingSheetIndex: activeSheetIndex,
+      editingCell: { ...activeCell },
     });
   },
 
@@ -504,22 +535,17 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   commitEditing: (dr = 0, dc = 0) => {
-    const {
-      isEditing,
-      editingValue,
-      activeCell,
-      workbook,
-      activeSheetIndex,
-      evaluator,
-      history,
-      setActiveCell,
-      updateTitle,
-    } = get();
+    const { isEditing, editingValue, workbook, evaluator, history, setActiveCell, updateTitle } = get();
 
     if (!isEditing) return;
 
-    const sheet = workbook.sheets[activeSheetIndex];
-    const key = cellToA1(activeCell.r, activeCell.c);
+    // เซลที่กำลังแก้อาจอยู่คนละชีตกับที่แสดงอยู่ (point mode ข้ามชีต)
+    const editSheetIndex = get().editingSheetIndex ?? get().activeSheetIndex;
+    const editCell = get().editingCell ?? get().activeCell;
+    returnToEditingSheet(get, set);
+
+    const sheet = workbook.sheets[editSheetIndex];
+    const key = cellToA1(editCell.r, editCell.c);
     const prevCell = sheet.cells[key] ? { ...sheet.cells[key] } : undefined;
 
     let finalValue = editingValue.trim();
@@ -549,11 +575,11 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         };
       }
 
-      evaluator.invalidate(key, activeSheetIndex);
+      evaluator.invalidate(key, editSheetIndex);
 
       const action: HistoryAction = {
         description: `Edit ${key}`,
-        sheetIndex: activeSheetIndex,
+        sheetIndex: editSheetIndex,
         patch: {
           cellPatches: [
             {
@@ -567,29 +593,23 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       history.push(action);
 
       set({
-        workbook: { ...workbook },
-        isEditing: false,
-        editingValue: '',
+        workbook: { ...get().workbook },
+        ...endEditingState,
         isDirty: true,
       });
       updateTitle();
     } else {
-      set({
-        isEditing: false,
-        editingValue: '',
-      });
+      set({ ...endEditingState });
     }
 
     if (dr !== 0 || dc !== 0) {
-      setActiveCell(activeCell.r + dr, activeCell.c + dc, false);
+      setActiveCell(editCell.r + dr, editCell.c + dc, false);
     }
   },
 
   cancelEditing: () => {
-    set({
-      isEditing: false,
-      editingValue: '',
-    });
+    returnToEditingSheet(get, set);
+    set({ ...endEditingState });
   },
 
   clearSelectionContent: () => {
@@ -1013,6 +1033,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       isDirty: false,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: [],
+      hiddenSheetNotice: 0,
       hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
@@ -1038,6 +1059,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       isDirty: false,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: wb.unsupportedFeatures || [],
+      hiddenSheetNotice: wb.sheets.filter((s) => s.hidden).length,
       hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
@@ -1130,6 +1152,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       fileName,
       isDirty: true,
       unsupportedFeatures: recoveredWb.unsupportedFeatures || [],
+      hiddenSheetNotice: recoveredWb.sheets.filter((s) => s.hidden).length,
       hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
@@ -1140,7 +1163,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   dismissUnsupportedBanner: () => {
-    set({ unsupportedFeatures: [] });
+    set({ unsupportedFeatures: [], hiddenSheetNotice: 0 });
   },
 
   loadTemplate: (wb: Workbook, templateName: string) => {
@@ -1152,6 +1175,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       isDirty: false,
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: [],
+      hiddenSheetNotice: 0,
       hasWarnedUnsupportedOverwrite: false,
     });
     get().updateTitle();
@@ -1180,7 +1204,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const target = workbook.sheets[index];
     if (!target || target.hidden || index === activeSheetIndex) return;
 
-    if (isEditing) {
+    // ระหว่างพิมพ์สูตร: สลับไปดูชีตอื่นได้โดยไม่ยืนยันการแก้ไข (point mode ข้ามชีต)
+    // ข้อความธรรมดา: ยืนยันการแก้ไขก่อนสลับ
+    const isFormulaEditing = isEditing && get().editingValue.trimStart().startsWith('=');
+    if (isEditing && !isFormulaEditing) {
       commitEditing(0, 0);
     }
 

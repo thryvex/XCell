@@ -137,6 +137,7 @@ export const th = {
   banner: {
     unsupportedFeatures: 'ไฟล์นี้มีบางส่วนที่แอปไม่รองรับ ({features}) และอาจหายไปเมื่อบันทึก แนะนำให้ "บันทึกเป็น" ไฟล์ใหม่',
     saveAsNewBtn: 'บันทึกเป็นไฟล์ใหม่',
+    hiddenSheets: 'มีชีตซ่อน {count} ชีต ถูกเก็บไว้ตามเดิม',
     dismiss: 'ปิดการแจ้งเตือน',
   },
   dialog: {

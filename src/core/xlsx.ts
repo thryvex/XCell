@@ -5,6 +5,7 @@ import { cellToA1, parseA1 } from './address';
 import { dateToSerial, THAI_TO_ERROR_MAP } from './numfmt';
 import { isCellError, FUNCTIONS } from './functions';
 import { tokenize } from './tokenizer';
+import { normalizeSheetRefsInFormula } from './refshift';
 
 const NUM_FMT_EXCEL: Record<string, string> = {
   number2: '#,##0.00',
@@ -49,19 +50,24 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
 
   const evaluator = new Evaluator(wbModel);
 
-  for (const [sheetIndex, sheetModel] of wbModel.sheets.entries()) {
-    const ws = excelWorkbook.addWorksheet(sheetModel.name || 'Sheet1');
+  const activeSheet = Math.max(0, Math.min(wbModel.sheets.length - 1, wbModel.activeSheet || 0));
+  // ชีตที่เปิดอยู่ (activeTab นับรวมชีตซ่อนตามลำดับแท็บ)
+  excelWorkbook.views = [
+    { x: 0, y: 0, width: 20000, height: 12000, firstSheet: 0, activeTab: activeSheet, visibility: 'visible' },
+  ];
 
-    // Apply views (freezing)
-    if (sheetModel.frozenRows > 0 || sheetModel.frozenCols > 0) {
-      ws.views = [
-        {
-          state: 'frozen',
-          xSplit: sheetModel.frozenCols,
-          ySplit: sheetModel.frozenRows,
-        },
-      ];
-    }
+  for (const [sheetIndex, sheetModel] of wbModel.sheets.entries()) {
+    const ws = excelWorkbook.addWorksheet(sheetModel.name || 'Sheet1', {
+      state: sheetModel.hidden ?? 'visible',
+    });
+    const tabSelected = sheetIndex === activeSheet;
+
+    // Apply views (freezing + ชีตที่เลือก; tabSelected มีใน ExcelJS runtime แต่ไม่มีใน type)
+    const isFrozen = sheetModel.frozenRows > 0 || sheetModel.frozenCols > 0;
+    const view: Record<string, unknown> = isFrozen
+      ? { state: 'frozen', xSplit: sheetModel.frozenCols, ySplit: sheetModel.frozenRows, tabSelected }
+      : { state: 'normal', tabSelected };
+    ws.views = [view as Partial<ExcelJS.WorksheetView>];
 
     // Apply column widths
     for (const [colIdxStr, widthPx] of Object.entries(sheetModel.colWidths)) {
@@ -89,7 +95,8 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
 
       if (raw.startsWith('=')) {
         // Formula: replace aliases like MEAN -> AVERAGE for Google Sheets compatibility
-        const formulaStr = raw.slice(1).replace(/\bMEAN\(/gi, 'AVERAGE(');
+        // และเขียนชื่อชีตในสูตรตามกติกา .xlsx (ใส่ '...' ยกเว้นชื่อ A-Z/ตัวเลข/ขีดล่างล้วน)
+        const formulaStr = normalizeSheetRefsInFormula(raw).slice(1).replace(/\bMEAN\(/gi, 'AVERAGE(');
         let resultVal: any = undefined;
 
         if (cellData.unsupportedFormula && cellData.cachedValue !== undefined) {
@@ -188,10 +195,7 @@ export function detectUnsupportedFeatures(excelWorkbook: ExcelJS.Workbook): stri
   }
 
   excelWorkbook.eachSheet((ws) => {
-    // 1. Hidden sheets
-    if (ws.state === 'hidden' || ws.state === 'veryHidden') {
-      features.add('แผ่นงานที่ซ่อนอยู่ (Hidden Sheets)');
-    }
+    // ชีตซ่อน: รองรับแล้วใน 4B (เก็บไว้ตามเดิม) จึงไม่นับเป็นส่วนที่ไม่รองรับ
 
     // 2. Images
     if (
@@ -267,12 +271,31 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
   excelWorkbook.eachSheet((ws, sheetId) => {
     const sheet: Sheet = createEmptySheet(ws.name || `Sheet${sheetId}`);
 
+    // Hidden sheets: เก็บข้อมูลและสถานะซ่อนไว้ตามเดิม
+    if (ws.state === 'hidden' || ws.state === 'veryHidden') {
+      sheet.hidden = ws.state;
+    }
+
     // Frozen panes
-    const view = ws.views?.find((v) => v.state === 'frozen');
+    const view = ws.views?.find((v) => v.state === 'frozen') as
+      | { xSplit?: number; ySplit?: number }
+      | undefined;
     if (view) {
       sheet.frozenCols = view.xSplit || 0;
       sheet.frozenRows = view.ySplit || 0;
     }
+
+    // Column widths / row heights (กลับด้านกับตอนเขียน: width × 8 px, height pt ÷ 0.75)
+    ws.columns?.forEach((col, idx) => {
+      if (col && typeof col.width === 'number' && (col as any).isCustomWidth !== false) {
+        sheet.colWidths[idx] = Math.round(col.width * 8);
+      }
+    });
+    ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      if (typeof row.height === 'number' && row.height > 0) {
+        sheet.rowHeights[rowNumber - 1] = Math.round(row.height / 0.75);
+      }
+    });
 
     // Iterate rows and cells
     ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -388,9 +411,13 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
     sheets.push(sheet);
   });
 
+  const activeTab = (excelWorkbook.views?.[0] as { activeTab?: number } | undefined)?.activeTab;
+  const activeSheet =
+    typeof activeTab === 'number' && activeTab >= 0 && activeTab < sheets.length ? activeTab : 0;
+
   return {
     sheets: sheets.length > 0 ? sheets : [createEmptySheet('Sheet1')],
-    activeSheet: 0,
+    activeSheet,
     unsupportedFeatures: unsupportedFeatures.length > 0 ? unsupportedFeatures : undefined,
   };
 }

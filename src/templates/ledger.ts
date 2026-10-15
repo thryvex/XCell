@@ -1,4 +1,5 @@
 import { Workbook, Sheet, createEmptySheet, CellStyle } from '../core/model';
+import { buildTemplateWorkbook } from './workbook';
 
 /**
  * Creates the "รายรับรายจ่าย" (Income & Expense Ledger) template workbook (SPEC 7 & Phase 3D)
@@ -87,8 +88,5 @@ export function createLedgerWorkbook(): Workbook {
     style: { bold: true, fill: '#dbeafe', border: 'all' },
   };
 
-  return {
-    sheets: [sheet],
-    activeSheet: 0,
-  };
+  return buildTemplateWorkbook([sheet]);
 }

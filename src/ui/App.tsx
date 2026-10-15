@@ -38,6 +38,7 @@ export const App: React.FC = () => {
     clearRecoverySnapshot,
     restoreRecoveryWorkbook,
     unsupportedFeatures,
+    hiddenSheetNotice,
     hasWarnedUnsupportedOverwrite,
     setHasWarnedUnsupportedOverwrite,
     dismissUnsupportedBanner,
@@ -558,7 +559,7 @@ export const App: React.FC = () => {
       <FormulaBar />
 
       {/* Unsupported Features Warning Banner (SPEC 6.4) */}
-      {unsupportedFeatures.length > 0 && (
+      {(unsupportedFeatures.length > 0 || hiddenSheetNotice > 0) && (
         <div
           style={{
             backgroundColor: '#fef3c7',
@@ -575,13 +576,15 @@ export const App: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>⚠️</span>
             <span>
-              {th.banner.unsupportedFeatures.replace(
-                '{features}',
-                unsupportedFeatures.join(', ')
-              )}
+              {unsupportedFeatures.length > 0 &&
+                th.banner.unsupportedFeatures.replace('{features}', unsupportedFeatures.join(', '))}
+              {unsupportedFeatures.length > 0 && hiddenSheetNotice > 0 && ' · '}
+              {hiddenSheetNotice > 0 &&
+                th.banner.hiddenSheets.replace('{count}', String(hiddenSheetNotice))}
             </span>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {unsupportedFeatures.length > 0 && (
             <button
               style={{
                 padding: '4px 10px',
@@ -597,6 +600,7 @@ export const App: React.FC = () => {
             >
               💾 {th.banner.saveAsNewBtn}
             </button>
+            )}
             <button
               style={{
                 padding: '2px 8px',

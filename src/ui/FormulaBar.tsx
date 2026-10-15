@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { th } from '../i18n/th';
 import { useSheetStore } from './store';
 import { cellToA1 } from '../core/address';
@@ -14,7 +14,22 @@ export const FormulaBar: React.FC = () => {
     cancelEditing,
     getRawValue,
     openFormulaHelper,
+    activeSheetIndex,
+    editingSheetIndex,
   } = useSheetStore();
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  // point mode ข้ามชีต: ช่องแก้ในเซลไม่แสดงบนชีตอื่น จึงให้แถบสูตรรับการพิมพ์แทน
+  const isEditingOnOtherSheet =
+    isEditing && editingSheetIndex !== null && editingSheetIndex !== activeSheetIndex;
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (isEditingOnOtherSheet && input) {
+      input.focus();
+      input.selectionStart = input.selectionEnd = input.value.length;
+    }
+  }, [isEditingOnOtherSheet, activeSheetIndex]);
 
   const activeA1 = cellToA1(activeCell.r, activeCell.c);
   const rawValue = getRawValue(activeCell.r, activeCell.c);
@@ -106,6 +121,7 @@ export const FormulaBar: React.FC = () => {
         {th.formulaBar.fx}
       </button>
       <input
+        ref={inputRef}
         value={displayVal}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}

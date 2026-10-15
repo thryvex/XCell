@@ -1,4 +1,5 @@
 import { Workbook, Sheet, createEmptySheet, CellStyle } from '../core/model';
+import { buildTemplateWorkbook } from './workbook';
 
 /**
  * Creates the "รายการสินค้า" (Product Inventory) template workbook (SPEC 7 & Phase 3D)
@@ -66,8 +67,5 @@ export function createInventoryWorkbook(): Workbook {
     style: { bold: true, fill: '#dbeafe', border: 'all' },
   };
 
-  return {
-    sheets: [sheet],
-    activeSheet: 0,
-  };
+  return buildTemplateWorkbook([sheet]);
 }
