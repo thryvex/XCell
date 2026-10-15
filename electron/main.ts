@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItemConstructorOptions } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { formatFsError } from '../src/core/fsError';
@@ -49,6 +49,30 @@ if (!gotTheLock) {
   });
 }
 
+/**
+ * เมนูแอปแบบเดียวกับค่าเริ่มต้นของ Electron แต่ไม่มีรายการซูม (View > Zoom)
+ * เพราะตารางมีซูมของตัวเอง (Ctrl+= / Ctrl+- / Ctrl+0) และต้องไม่ซูมทั้งหน้าต่าง
+ */
+function buildAppMenu() {
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' } as MenuItemConstructorOptions] : []),
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -62,6 +86,12 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  // ปิดซูมของ Chromium (pinch และ Ctrl+ล้อเมาส์): ตารางจัดการซูมเอง
+  mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
+  mainWindow.webContents.on('zoom-changed', () => {
+    mainWindow?.webContents.setZoomFactor(1);
   });
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -365,6 +395,7 @@ ipcMain.on('window:forceClose', () => {
 
 // App Lifecycle
 app.whenReady().then(() => {
+  buildAppMenu();
   createWindow();
 
   app.on('activate', () => {

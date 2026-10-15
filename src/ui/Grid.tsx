@@ -86,6 +86,9 @@ export const Grid: React.FC = () => {
     requestSort,
     openAdvancedSort,
     toggleFilter,
+    zoomIn,
+    zoomOut,
+    resetZoom,
   } = useSheetStore();
 
   const sheet = workbook.sheets[activeSheetIndex];
@@ -103,6 +106,23 @@ export const Grid: React.FC = () => {
     [hiddenSet, rowCount]
   );
   const [filterMenu, setFilterMenu] = useState<{ col: number; x: number; y: number } | null>(null);
+
+  // ซูมต่อชีต (4C)
+  const zoomFactor = (sheet.zoom ?? 100) / 100;
+
+  // Ctrl+ล้อเมาส์ = ซูม (ต้องเป็น listener แบบ non-passive จึงกัน preventDefault ได้)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      if (e.deltaY < 0) zoomIn();
+      else if (e.deltaY > 0) zoomOut();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoomIn, zoomOut]);
   // ชีตของเซลที่กำลังแก้สูตร (point mode ข้ามชีต: ชีตที่แสดงอาจไม่ใช่ชีตนี้)
   const editingSheet = editingSheetIndex !== null ? workbook.sheets[editingSheetIndex] : undefined;
   const editingSheetName = editingSheet?.name ?? sheet.name;
@@ -250,6 +270,25 @@ export const Grid: React.FC = () => {
   // Global keyboard shortcuts in grid
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ซูม: Ctrl+= / Ctrl+- / Ctrl+0 (ใช้ได้ตลอด)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          zoomIn();
+          return;
+        }
+        if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          zoomOut();
+          return;
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          resetZoom();
+          return;
+        }
+      }
+
       // Ctrl+F เปิดแถบค้นหา, F3 / Shift+F3 ผลถัดไป/ก่อนหน้า
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
@@ -436,6 +475,9 @@ export const Grid: React.FC = () => {
     prevSheet,
     stepRow,
     toggleFilter,
+    zoomIn,
+    zoomOut,
+    resetZoom,
   ]);
 
   // Point mode cell click / regular selection
@@ -552,10 +594,10 @@ export const Grid: React.FC = () => {
     const handleMouseMove = (e: MouseEvent) => {
       if (resizingCol) {
         const delta = e.clientX - resizingCol.startX;
-        setColWidth(resizingCol.colIdx, resizingCol.startW + delta);
+        setColWidth(resizingCol.colIdx, resizingCol.startW + delta / zoomFactor);
       } else if (resizingRow) {
         const delta = e.clientY - resizingRow.startY;
-        setRowHeight(resizingRow.rowIdx, resizingRow.startH + delta);
+        setRowHeight(resizingRow.rowIdx, resizingRow.startH + delta / zoomFactor);
       }
     };
 
@@ -565,7 +607,7 @@ export const Grid: React.FC = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [resizingCol, resizingRow, isFillDragging, fillTarget, pointModeAnchor, setColWidth, setRowHeight]);
+  }, [resizingCol, resizingRow, isFillDragging, fillTarget, pointModeAnchor, setColWidth, setRowHeight, zoomFactor]);
 
   // Context Menu triggers
   const handleCellContextMenu = (r: number, c: number, e: React.MouseEvent) => {
@@ -716,7 +758,8 @@ export const Grid: React.FC = () => {
         backgroundColor: 'var(--bg-app)',
       }}
     >
-      <div style={{ position: 'relative', display: 'inline-block' }}>
+      {/* ซูมเฉพาะพื้นที่ตาราง (CSS zoom): การคลิก/ลากใช้พิกัดของ element จึงตรงทุกระดับซูม */}
+      <div style={{ position: 'relative', display: 'inline-block', zoom: zoomFactor }}>
         {/* Fill handle square */}
         {!isEditing && (
           <div

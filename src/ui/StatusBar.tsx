@@ -1,15 +1,25 @@
 import React, { useMemo } from 'react';
 import { th } from '../i18n/th';
-import { useSheetStore } from './store';
+import { useSheetStore, ZOOM_MIN, ZOOM_MAX } from './store';
 import { cellToA1 } from '../core/address';
 import { formatNumberWithCommas } from '../core/numfmt';
 import { filterDataRowCount } from '../core/filter';
 
 export const StatusBar: React.FC = () => {
-  const { selection, getComputedValue, isDirty, workbook, activeSheetIndex } = useSheetStore();
+  const { selection, getComputedValue, isDirty, workbook, activeSheetIndex, zoomIn, zoomOut, resetZoom } =
+    useSheetStore();
   const sheet = workbook.sheets[activeSheetIndex];
   const filter = sheet?.filter;
   const hiddenRows = sheet?.hiddenRows;
+  const zoom = sheet?.zoom ?? 100;
+  const zoomButton: React.CSSProperties = {
+    border: '1px solid transparent',
+    background: 'transparent',
+    padding: '0 6px',
+    fontSize: '13px',
+    cursor: 'pointer',
+    color: 'var(--fg-main)',
+  };
 
   const isSingleCell = selection.r1 === selection.r2 && selection.c1 === selection.c2;
   const rangeText = isSingleCell
@@ -91,7 +101,19 @@ export const StatusBar: React.FC = () => {
         )}
       </div>
 
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        {/* ซูม 50%–200% (4C) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <button style={zoomButton} onClick={zoomOut} title={th.zoom.zoomOut} disabled={zoom <= ZOOM_MIN}>
+            −
+          </button>
+          <button style={{ ...zoomButton, minWidth: '46px' }} onClick={resetZoom} title={th.zoom.reset}>
+            {th.zoom.percent.replace('{percent}', String(zoom))}
+          </button>
+          <button style={zoomButton} onClick={zoomIn} title={th.zoom.zoomIn} disabled={zoom >= ZOOM_MAX}>
+            +
+          </button>
+        </div>
         {isDirty ? (
           <span style={{ color: 'var(--color-danger)' }}>{th.statusBar.unsaved}</span>
         ) : (

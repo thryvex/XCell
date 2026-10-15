@@ -125,6 +125,9 @@ export const th = {
       { key: 'F3 / Enter', desc: 'ผลค้นหาถัดไป' },
       { key: 'Shift+F3 / Shift+Enter', desc: 'ผลค้นหาก่อนหน้า' },
       { key: 'Ctrl+Shift+L', desc: 'เปิด/ปิดตัวกรอง' },
+      { key: 'Ctrl+= / Ctrl+-', desc: 'ซูมเข้า / ซูมออก ทีละ 10% (50%–200%)' },
+      { key: 'Ctrl+0', desc: 'ซูมกลับเป็น 100%' },
+      { key: 'Ctrl+ล้อเมาส์', desc: 'ซูมเข้า/ออก' },
     ],
     gsTitle: 'วิธีนำไฟล์ .xlsx ไปเปิดใน Google Sheets',
     gsStep1: '① อัปโหลดไฟล์: เข้าเว็บ Google Drive แล้วลากไฟล์ .xlsx ที่บันทึกจาก SheetEasy ไปวางเพื่ออัปโหลด',
@@ -286,6 +289,12 @@ export const th = {
     continue: 'เรียงต่อ',
     mergedError: 'เรียงลำดับไม่ได้ในช่วงที่มีเซลผสาน แยกเซลก่อน',
     noData: 'ไม่มีข้อมูลให้เรียงลำดับ',
+  },
+  zoom: {
+    zoomIn: 'ซูมเข้า (Ctrl+=)',
+    zoomOut: 'ซูมออก (Ctrl+-)',
+    reset: 'คลิกเพื่อกลับเป็น 100% (Ctrl+0)',
+    percent: '{percent}%',
   },
   filter: {
     button: 'ตัวกรอง',

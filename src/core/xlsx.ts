@@ -64,9 +64,10 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
 
     // Apply views (freezing + ชีตที่เลือก; tabSelected มีใน ExcelJS runtime แต่ไม่มีใน type)
     const isFrozen = sheetModel.frozenRows > 0 || sheetModel.frozenCols > 0;
+    const zoomScale = sheetModel.zoom ?? 100; // ระดับซูมของชีต (4C)
     const view: Record<string, unknown> = isFrozen
-      ? { state: 'frozen', xSplit: sheetModel.frozenCols, ySplit: sheetModel.frozenRows, tabSelected }
-      : { state: 'normal', tabSelected };
+      ? { state: 'frozen', xSplit: sheetModel.frozenCols, ySplit: sheetModel.frozenRows, tabSelected, zoomScale }
+      : { state: 'normal', tabSelected, zoomScale };
     ws.views = [view as Partial<ExcelJS.WorksheetView>];
 
     // Apply column widths
@@ -295,6 +296,13 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
     if (view) {
       sheet.frozenCols = view.xSplit || 0;
       sheet.frozenRows = view.ySplit || 0;
+    }
+
+    // ระดับซูมของชีต (zoomScale) ปัดเป็นขั้น 10% ในช่วง 50–200%
+    const zoomScale = (ws.views?.[0] as { zoomScale?: number } | undefined)?.zoomScale;
+    if (typeof zoomScale === 'number' && zoomScale !== 100) {
+      const z = Math.max(50, Math.min(200, Math.round(zoomScale / 10) * 10));
+      if (z !== 100) sheet.zoom = z;
     }
 
     // Column widths / row heights (กลับด้านกับตอนเขียน: width × 8 px, height pt ÷ 0.75)

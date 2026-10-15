@@ -252,6 +252,12 @@ export interface SheetState {
   sortFilterColumn: (col: number, dir: SortDirection) => void;
   showAllFilteredRows: () => void;
   dismissFilteredRowsNotice: () => void;
+
+  // Phase 4C: ซูม (ต่อชีต, เก็บใน Sheet.zoom; ไม่อยู่ใน Undo)
+  setZoom: (percent: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
 }
 
 export interface PendingSort {
@@ -279,6 +285,10 @@ const closedSearch: SearchState = {
   matches: [],
   current: -1,
 };
+
+export const ZOOM_MIN = 50;
+export const ZOOM_MAX = 200;
+export const ZOOM_STEP = 10;
 
 const DEFAULT_ROW_COUNT = 100;
 const DEFAULT_COL_COUNT = 26;
@@ -1738,6 +1748,31 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   dismissFilteredRowsNotice: () => set({ filteredRowsNotice: false }),
+
+  // --- Phase 4C: ซูม ---
+
+  setZoom: (percent: number) => {
+    const { workbook, activeSheetIndex } = get();
+    const sheet = workbook.sheets[activeSheetIndex];
+    const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(percent / ZOOM_STEP) * ZOOM_STEP));
+    if ((sheet.zoom ?? 100) === clamped) return;
+    if (clamped === 100) delete sheet.zoom;
+    else sheet.zoom = clamped;
+    // ระดับซูมเป็นสถานะการมองเห็น: ไม่ทำให้ไฟล์เป็น "ยังไม่ได้บันทึก" แต่จะถูกเขียนลงไฟล์ตอนบันทึกครั้งถัดไป
+    set({ workbook: { ...workbook } });
+  },
+
+  zoomIn: () => {
+    const { workbook, activeSheetIndex, setZoom } = get();
+    setZoom((workbook.sheets[activeSheetIndex].zoom ?? 100) + ZOOM_STEP);
+  },
+
+  zoomOut: () => {
+    const { workbook, activeSheetIndex, setZoom } = get();
+    setZoom((workbook.sheets[activeSheetIndex].zoom ?? 100) - ZOOM_STEP);
+  },
+
+  resetZoom: () => get().setZoom(100),
 
   getRawValue: (r: number, c: number) => {
     const { workbook, activeSheetIndex } = get();
