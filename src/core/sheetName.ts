@@ -1,4 +1,5 @@
 import { th } from '../i18n/th';
+import { tokenize } from './tokenizer';
 
 export const FORBIDDEN_SHEET_NAME_CHARS = ['[', ']', ':', '*', '?', '/', '\\'];
 
@@ -104,17 +105,25 @@ export function generateDuplicateSheetName(sourceName: string, existingNames: st
   return candidate;
 }
 
+/** เทียบชื่อชีตแบบไม่สนตัวพิมพ์เล็ก/ใหญ่ */
+export function sameSheetName(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 /**
- * Formats a sheet name for formula representation according to Excel/Google Sheets quoting rules:
- * - Simple ASCII letters/numbers/underscore don't require quotes
- * - Otherwise wrap in single quotes '...' and escape existing single quotes as ''
+ * เขียนชื่อชีตสำหรับใช้ในสูตร (ทั้งในแอปและใน .xlsx):
+ * - ไม่ใส่เครื่องหมายคำพูดเฉพาะชื่อที่เป็น A-Z / ตัวเลข / ขีดล่างล้วน ที่ไม่ขึ้นต้นด้วยตัวเลข
+ *   และไม่หน้าตาเหมือนที่อยู่เซล (เช่น "A1") หรือ TRUE/FALSE
+ * - นอกนั้นใส่ '...' และเขียน ' ในชื่อเป็น ''
  */
 export function formatSheetReference(sheetName: string): string {
-  // If simple ASCII alphanumeric or underscore, doesn't require quotes
-  if (/^[A-Za-z0-9_]+$/.test(sheetName)) {
+  const isPlain =
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(sheetName) &&
+    !/^[A-Za-z]{1,3}\d+$/.test(sheetName) &&
+    !/^(TRUE|FALSE)$/i.test(sheetName);
+  if (isPlain) {
     return sheetName;
   }
-  // Otherwise wrap in single quotes and escape ' with ''
   const escaped = sheetName.replace(/'/g, "''");
   return `'${escaped}'`;
 }
@@ -124,21 +133,12 @@ export function formatSheetReference(sheetName: string): string {
  */
 export function formulaReferencesSheet(rawFormula: string, targetSheetName: string): boolean {
   if (!rawFormula || !rawFormula.startsWith('=')) return false;
-
-  // 1. Quoted reference: 'SheetName'! (with '' escaped)
-  const escapedQuotes = targetSheetName.replace(/'/g, "''");
-  const regexQuotedTarget = escapedQuotes.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const quotedRegex = new RegExp(`'${regexQuotedTarget}'\\s*!`, 'i');
-  if (quotedRegex.test(rawFormula)) return true;
-
-  // 2. Unquoted reference (only valid if sheetName has no special characters or spaces)
-  if (!/[\s'!"#$%&()*+,/:;<=>?@[\\\]^`{|}~-]/.test(targetSheetName)) {
-    const regexTarget = targetSheetName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const unquotedRegex = new RegExp(`(?<![A-Za-z0-9_ก-๙])${regexTarget}\\s*!`, 'i');
-    if (unquotedRegex.test(rawFormula)) return true;
-  }
-
-  return false;
+  return tokenize(rawFormula).some(
+    (t) =>
+      (t.type === 'CELL_REF' || t.type === 'RANGE') &&
+      t.sheet !== undefined &&
+      sameSheetName(t.sheet, targetSheetName)
+  );
 }
 
 /**
@@ -149,10 +149,9 @@ export function countFormulasReferencingSheet(
   targetSheetName: string
 ): number {
   let count = 0;
-  const targetLower = targetSheetName.toLowerCase();
 
   for (const sheet of sheets) {
-    if (sheet.name.toLowerCase() === targetLower) continue;
+    if (sameSheetName(sheet.name, targetSheetName)) continue;
 
     for (const cell of Object.values(sheet.cells)) {
       if (cell.raw && formulaReferencesSheet(cell.raw, targetSheetName)) {

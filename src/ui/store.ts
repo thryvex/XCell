@@ -21,8 +21,9 @@ import {
   adjacentVisibleSheet,
   nearestVisibleSheet,
   SheetOpResult,
+  countSheetReferences,
 } from '../core/workbookOps';
-import { countFormulasReferencingSheet } from '../core/sheetName';
+
 import { th } from '../i18n/th';
 import { convertShorthand } from '../core/shorthand';
 import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/address';
@@ -34,8 +35,8 @@ import {
   deleteRow as opDeleteRow,
   insertCol as opInsertCol,
   deleteCol as opDeleteCol,
-  countFormulasReferencingRow,
-  countFormulasReferencingCol,
+  countFormulasBrokenByDelete,
+  adjustOtherSheetsForRowCol,
 } from '../core/sheetOps';
 import { rangeToTsv, rangeToHtml, parseTsv } from '../core/clipboard';
 import { computeFill, fillDown as opFillDown, fillRight as opFillRight } from '../core/fill';
@@ -124,9 +125,9 @@ export interface SheetState {
   cutSelection: () => void;
   paste: (valuesOnly?: boolean) => Promise<void>;
   insertRowAt: (atRow: number) => void;
-  deleteRowAt: (atRow: number) => void;
+  deleteRowAt: (atRow: number, force?: boolean) => void;
   insertColAt: (atCol: number) => void;
-  deleteColAt: (atCol: number) => void;
+  deleteColAt: (atCol: number, force?: boolean) => void;
   addRowsAtBottom: (count?: number) => void;
   setColWidth: (colIdx: number, width: number) => void;
   setRowHeight: (rowIdx: number, height: number) => void;
@@ -349,11 +350,66 @@ function runSheetOp(
   return res;
 }
 
-/** จำนวนเซลสูตรในชีตอื่นที่อ้างถึงชีต index */
-function countSheetReferences(wb: Workbook, index: number): number {
-  const target = wb.sheets[index];
-  if (!target) return 0;
-  return countFormulasReferencingSheet(wb.sheets, target.name);
+/**
+ * แทรก/ลบแถว-คอลัมน์ในชีตที่เปิดอยู่ และปรับสูตรในชีตอื่นที่อ้างถึงชีตนี้ด้วย
+ */
+function applyRowColOp(
+  get: StoreGet,
+  set: StoreSet,
+  op: 'insert' | 'delete',
+  axis: 'row' | 'col',
+  index: number
+) {
+  const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
+  const sheet = workbook.sheets[activeSheetIndex];
+  const fullBefore = {
+    cells: JSON.parse(JSON.stringify(sheet.cells)),
+    merges: JSON.parse(JSON.stringify(sheet.merges)),
+    rowCount,
+    colCount,
+  };
+
+  if (op === 'insert') {
+    if (axis === 'row') opInsertRow(sheet, index, 1);
+    else opInsertCol(sheet, index, 1);
+  } else {
+    if (axis === 'row') opDeleteRow(sheet, index, 1);
+    else opDeleteCol(sheet, index, 1);
+  }
+  const extraCellPatches = adjustOtherSheetsForRowCol(workbook, activeSheetIndex, op, axis, index, 1);
+  evaluator.setWorkbook(workbook);
+
+  const delta = op === 'insert' ? 1 : -1;
+  const newRowCount = axis === 'row' ? Math.max(1, rowCount + delta) : rowCount;
+  const newColCount = axis === 'col' ? Math.max(1, colCount + delta) : colCount;
+  const fullAfter = {
+    cells: JSON.parse(JSON.stringify(sheet.cells)),
+    merges: JSON.parse(JSON.stringify(sheet.merges)),
+    rowCount: newRowCount,
+    colCount: newColCount,
+  };
+
+  const descriptions = {
+    'insert-row': 'Insert row',
+    'delete-row': 'Delete row',
+    'insert-col': 'Insert column',
+    'delete-col': 'Delete column',
+  } as const;
+
+  history.push({
+    description: descriptions[`${op}-${axis}`],
+    sheetIndex: activeSheetIndex,
+    patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
+    extraCellPatches: extraCellPatches.length > 0 ? extraCellPatches : undefined,
+  });
+
+  set({
+    workbook: { ...workbook },
+    rowCount: newRowCount,
+    colCount: newColCount,
+    isDirty: true,
+  });
+  updateTitle();
 }
 
 const initialWb = ensureSheetIds(createEmptyWorkbook());
@@ -1450,149 +1506,35 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   insertRowAt: (atRow: number) => {
-    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
-    const sheet = workbook.sheets[activeSheetIndex];
-    const fullBefore = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount,
-      colCount,
-    };
-    opInsertRow(sheet, atRow, 1);
-    evaluator.setWorkbook(workbook);
-    const newRowCount = rowCount + 1;
-    const fullAfter = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount: newRowCount,
-      colCount,
-    };
-    history.push({
-      description: 'Insert row',
-      sheetIndex: activeSheetIndex,
-      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
-    });
-
-    set({
-      workbook: { ...workbook },
-      rowCount: newRowCount,
-      isDirty: true,
-    });
-    updateTitle();
+    applyRowColOp(get, set, 'insert', 'row', atRow);
   },
 
   deleteRowAt: (atRow: number, force = false) => {
-    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
-    const sheet = workbook.sheets[activeSheetIndex];
-
+    const { workbook, activeSheetIndex } = get();
     if (!force) {
-      const refCount = countFormulasReferencingRow(sheet, atRow);
+      const refCount = countFormulasBrokenByDelete(workbook, activeSheetIndex, 'row', atRow, 1);
       if (refCount > 0) {
         set({ pendingDelete: { type: 'row', index: atRow, count: refCount } });
         return;
       }
     }
-
-    const fullBefore = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount,
-      colCount,
-    };
-    opDeleteRow(sheet, atRow, 1);
-    evaluator.setWorkbook(workbook);
-    const newRowCount = Math.max(1, rowCount - 1);
-    const fullAfter = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount: newRowCount,
-      colCount,
-    };
-    history.push({
-      description: 'Delete row',
-      sheetIndex: activeSheetIndex,
-      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
-    });
-
-    set({
-      workbook: { ...workbook },
-      rowCount: newRowCount,
-      isDirty: true,
-    });
-    updateTitle();
+    applyRowColOp(get, set, 'delete', 'row', atRow);
   },
 
   insertColAt: (atCol: number) => {
-    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
-    const sheet = workbook.sheets[activeSheetIndex];
-    const fullBefore = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount,
-      colCount,
-    };
-    opInsertCol(sheet, atCol, 1);
-    evaluator.setWorkbook(workbook);
-    const newColCount = colCount + 1;
-    const fullAfter = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount,
-      colCount: newColCount,
-    };
-    history.push({
-      description: 'Insert column',
-      sheetIndex: activeSheetIndex,
-      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
-    });
-
-    set({
-      workbook: { ...workbook },
-      colCount: newColCount,
-      isDirty: true,
-    });
-    updateTitle();
+    applyRowColOp(get, set, 'insert', 'col', atCol);
   },
 
   deleteColAt: (atCol: number, force = false) => {
-    const { workbook, activeSheetIndex, evaluator, history, rowCount, colCount, updateTitle } = get();
-    const sheet = workbook.sheets[activeSheetIndex];
-
+    const { workbook, activeSheetIndex } = get();
     if (!force) {
-      const refCount = countFormulasReferencingCol(sheet, atCol);
+      const refCount = countFormulasBrokenByDelete(workbook, activeSheetIndex, 'col', atCol, 1);
       if (refCount > 0) {
         set({ pendingDelete: { type: 'col', index: atCol, count: refCount } });
         return;
       }
     }
-
-    const fullBefore = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount,
-      colCount,
-    };
-    opDeleteCol(sheet, atCol, 1);
-    evaluator.setWorkbook(workbook);
-    const newColCount = Math.max(1, colCount - 1);
-    const fullAfter = {
-      cells: JSON.parse(JSON.stringify(sheet.cells)),
-      merges: JSON.parse(JSON.stringify(sheet.merges)),
-      rowCount,
-      colCount: newColCount,
-    };
-    history.push({
-      description: 'Delete column',
-      sheetIndex: activeSheetIndex,
-      patch: { fullSheetBefore: fullBefore, fullSheetAfter: fullAfter },
-    });
-
-    set({
-      workbook: { ...workbook },
-      colCount: newColCount,
-      isDirty: true,
-    });
-    updateTitle();
+    applyRowColOp(get, set, 'delete', 'col', atCol);
   },
 
   confirmPendingDelete: () => {

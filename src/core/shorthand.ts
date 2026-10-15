@@ -91,7 +91,11 @@ export function convertShorthand(input: string): string | null {
     let onlyValidTypes = true;
 
     for (const t of tokens) {
-      if (t.type === 'CELL_REF' || t.type === 'RANGE') {
+      if ((t.type === 'CELL_REF' || t.type === 'RANGE') && t.sheet !== undefined) {
+        // ไม่แปลงข้อความที่มีการอ้างข้ามชีตให้เป็นสูตรอัตโนมัติ (ต้องพิมพ์ = เอง)
+        onlyValidTypes = false;
+        break;
+      } else if (t.type === 'CELL_REF' || t.type === 'RANGE') {
         hasCellRef = true;
       } else if (
         t.type !== 'NUMBER' &&

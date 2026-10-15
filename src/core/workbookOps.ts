@@ -3,7 +3,9 @@ import {
   validateSheetName,
   generateNextSheetName,
   generateDuplicateSheetName,
+  countFormulasReferencingSheet,
 } from './sheetName';
+import { renameSheetInFormula, invalidateSheetInFormula } from './refshift';
 import { th } from '../i18n/th';
 
 export interface SheetOpResult {
@@ -80,8 +82,30 @@ export function renameSheet(wb: Workbook, index: number, newName: string): Sheet
     return { ok: false, error: validation.error };
   }
 
+  const oldName = sheet.name;
   sheet.name = trimmed;
+  // เขียนสูตรทุกเซลในทุกชีตที่อ้างถึงชื่อเดิมให้เป็นชื่อใหม่
+  rewriteAllFormulas(wb, (raw) => renameSheetInFormula(raw, oldName, trimmed));
   return { ok: true, index };
+}
+
+function rewriteAllFormulas(wb: Workbook, fn: (raw: string) => string) {
+  for (const s of wb.sheets) {
+    for (const [key, cell] of Object.entries(s.cells)) {
+      if (!cell.raw || !cell.raw.startsWith('=')) continue;
+      const next = fn(cell.raw);
+      if (next !== cell.raw) {
+        s.cells[key] = { ...cell, raw: next };
+      }
+    }
+  }
+}
+
+/** จำนวนเซลสูตรในชีตอื่นที่อ้างถึงชีต index */
+export function countSheetReferences(wb: Workbook, index: number): number {
+  const target = wb.sheets[index];
+  if (!target) return 0;
+  return countFormulasReferencingSheet(wb.sheets, target.name);
 }
 
 /** ลบชีต: ห้ามลบชีตสุดท้ายที่มองเห็นได้ */
@@ -94,6 +118,8 @@ export function deleteSheet(wb: Workbook, index: number): SheetOpResult {
   }
 
   wb.sheets.splice(index, 1);
+  // reference ที่ชี้ชีตที่ถูกลบกลายเป็น #REF! (Undo ใช้ snapshot คืนสูตรเดิมทั้งหมด)
+  rewriteAllFormulas(wb, (raw) => invalidateSheetInFormula(raw, sheet.name));
   const next = nearestVisibleSheet(wb, Math.min(index, wb.sheets.length - 1));
   return { ok: true, index: next };
 }

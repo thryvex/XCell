@@ -25,6 +25,23 @@ export interface Token {
 const CELL_REF_REGEX = /^\$?[A-Za-z]+\$?\d+$/;
 const RANGE_REGEX = /^\$?[A-Za-z]+\$?\d+:\$?[A-Za-z]+\$?\d+$/;
 
+// อ้างข้ามชีต: 'ชื่อ ชีต'!A1, 'ชีต''s'!A1:B5 หรือแบบไม่มีเครื่องหมายคำพูด ชีต2!$A$1
+// ชื่อแบบไม่มีเครื่องหมายคำพูดประกอบด้วยตัวอักษร (รวมไทย) ตัวเลข ขีดล่างเท่านั้น
+const ADDRESS_PATTERN = String.raw`\$?[A-Za-z]+\$?\d+(?::\$?[A-Za-z]+\$?\d+)?`;
+const REF_END = String.raw`(?![A-Za-z0-9_$฀-๿(])`;
+const QUOTED_SHEET_REF = new RegExp(String.raw`'((?:[^']|'')+)'!(${ADDRESS_PATTERN})${REF_END}`, 'y');
+const UNQUOTED_SHEET_REF = new RegExp(
+  String.raw`([A-Za-z0-9_฀-๿]+)!(${ADDRESS_PATTERN})${REF_END}`,
+  'y'
+);
+// ค่าข้อผิดพลาดที่อยู่ในสูตรได้ เช่น =A1+#REF! (เกิดจากการลบแถว/ชีต)
+const ERROR_LITERAL = /#(REF!|DIV\/0!|VALUE!|NAME\?)/iy;
+
+function matchSticky(re: RegExp, text: string, pos: number): RegExpExecArray | null {
+  re.lastIndex = pos;
+  return re.exec(text);
+}
+
 export function tokenize(formulaText: string, options: { includeWhitespace?: boolean } = {}): Token[] {
   const tokens: Token[] = [];
   if (!formulaText) return tokens;
@@ -87,6 +104,44 @@ export function tokenize(formulaText: string, options: { includeWhitespace?: boo
         end: i + offset,
       });
       continue;
+    }
+
+    // 2b. Sheet-qualified reference: 'ชื่อชีต'!A1 or ชีต2!A1:B5
+    if (ch === "'" || /[A-Za-z0-9_฀-๿]/.test(ch)) {
+      const m =
+        ch === "'"
+          ? matchSticky(QUOTED_SHEET_REF, text, i)
+          : matchSticky(UNQUOTED_SHEET_REF, text, i);
+      if (m) {
+        const sheet = ch === "'" ? m[1].replace(/''/g, "'") : m[1];
+        const address = m[2];
+        tokens.push({
+          type: address.includes(':') ? 'RANGE' : 'CELL_REF',
+          value: address.toUpperCase(),
+          raw: m[0],
+          start: i + offset,
+          end: i + m[0].length + offset,
+          sheet,
+        });
+        i += m[0].length;
+        continue;
+      }
+    }
+
+    // 2c. Error literal: #REF!, #DIV/0!, #VALUE!, #NAME?
+    if (ch === '#') {
+      const m = matchSticky(ERROR_LITERAL, text, i);
+      if (m) {
+        tokens.push({
+          type: 'ERROR',
+          value: m[0].toUpperCase(),
+          raw: m[0],
+          start: i + offset,
+          end: i + m[0].length + offset,
+        });
+        i += m[0].length;
+        continue;
+      }
     }
 
     // 3. Numbers

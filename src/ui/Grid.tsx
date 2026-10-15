@@ -4,6 +4,7 @@ import { Cell } from './Cell';
 import { ContextMenu, ContextMenuTarget } from './ContextMenu';
 import { colToStr, cellToA1, parseRange } from '../core/address';
 import { tokenize } from '../core/tokenizer';
+import { sameSheetName } from '../core/sheetName';
 import { MergeRange } from '../core/model';
 import { th } from '../i18n/th';
 
@@ -79,6 +80,8 @@ export const Grid: React.FC = () => {
 
   const sheet = workbook.sheets[activeSheetIndex];
   const sheetId = sheet.id;
+  // ชีตของเซลที่กำลังแก้สูตร (ขั้น 3: point mode ข้ามชีตจะต่างจากชีตที่แสดงได้)
+  const editingSheetName = sheet.name;
 
   // แสดงกรอบ "ตัด" เฉพาะบนชีตต้นทาง
   const visibleCutRange =
@@ -139,27 +142,31 @@ export const Grid: React.FC = () => {
       let colorIdx = 0;
 
       for (const t of tokens) {
+        if (t.type !== 'CELL_REF' && t.type !== 'RANGE') continue;
+        const color = HIGHLIGHT_COLORS[colorIdx % HIGHLIGHT_COLORS.length];
+        colorIdx++;
+
+        // ไฮไลต์เฉพาะ reference ที่ชี้ชีตที่แสดงอยู่ (ไม่มีชื่อชีต = ชีตของเซลที่กำลังแก้)
+        const refSheet = t.sheet ?? editingSheetName;
+        if (!sameSheetName(refSheet, sheet.name)) continue;
+
         if (t.type === 'CELL_REF') {
-          const color = HIGHLIGHT_COLORS[colorIdx % HIGHLIGHT_COLORS.length];
           map[t.value.toUpperCase()] = color;
-          colorIdx++;
-        } else if (t.type === 'RANGE') {
+        } else {
           const rng = parseRange(t.value);
           if (rng) {
-            const color = HIGHLIGHT_COLORS[colorIdx % HIGHLIGHT_COLORS.length];
             for (let r = rng.r1; r <= rng.r2; r++) {
               for (let c = rng.c1; c <= rng.c2; c++) {
                 map[cellToA1(r, c)] = color;
               }
             }
-            colorIdx++;
           }
         }
       }
     } catch {}
 
     return map;
-  }, [isEditing, editingValue]);
+  }, [isEditing, editingValue, editingSheetName, sheet.name]);
 
   // Focus input when editing starts
   useEffect(() => {

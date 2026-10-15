@@ -172,7 +172,8 @@ export class FormulaParser {
 
     if (t.type === 'CELL_REF') {
       this.consume();
-      return { type: 'CellRef', a1: t.value.toUpperCase(), sheet: t.sheet };
+      // ตัด $ ออก: $A$1 กับ A1 คือเซลเดียวกัน
+      return { type: 'CellRef', a1: t.value.toUpperCase().replace(/\$/g, ''), sheet: t.sheet };
     }
 
     if (t.type === 'RANGE') {

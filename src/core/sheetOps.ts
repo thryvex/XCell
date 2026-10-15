@@ -1,6 +1,12 @@
-import { Sheet, Cell, MergeRange } from './model';
+import { Sheet, Cell, MergeRange, Workbook } from './model';
+import { SheetCellPatch } from './history';
 import { parseA1, cellToA1 } from './address';
-import { shiftFormulaOnInsert, shiftFormulaOnDelete } from './refshift';
+import { shiftFormulaOnInsert, shiftFormulaOnDelete, RefScope } from './refshift';
+
+/** สูตรในชีตนี้: ปรับเฉพาะ reference ที่ชี้ชีตนี้ (ไม่มีชื่อชีต หรือระบุชื่อชีตนี้เอง) */
+function ownScope(sheet: Sheet): RefScope {
+  return { formulaSheet: sheet.name, targetSheet: sheet.name };
+}
 
 export function insertRow(sheet: Sheet, atRow: number, count = 1): Sheet {
   const newCells: Record<string, Cell> = {};
@@ -15,7 +21,7 @@ export function insertRow(sheet: Sheet, atRow: number, count = 1): Sheet {
 
     let raw = cell.raw;
     if (raw && raw.startsWith('=')) {
-      raw = shiftFormulaOnInsert(raw, 'row', atRow, count);
+      raw = shiftFormulaOnInsert(raw, 'row', atRow, count, ownScope(sheet));
     }
 
     newCells[newKey] = {
@@ -70,7 +76,7 @@ export function deleteRow(sheet: Sheet, atRow: number, count = 1): Sheet {
 
     let raw = cell.raw;
     if (raw && raw.startsWith('=')) {
-      raw = shiftFormulaOnDelete(raw, 'row', atRow, count);
+      raw = shiftFormulaOnDelete(raw, 'row', atRow, count, ownScope(sheet));
     }
 
     newCells[newKey] = {
@@ -121,7 +127,7 @@ export function insertCol(sheet: Sheet, atCol: number, count = 1): Sheet {
 
     let raw = cell.raw;
     if (raw && raw.startsWith('=')) {
-      raw = shiftFormulaOnInsert(raw, 'col', atCol, count);
+      raw = shiftFormulaOnInsert(raw, 'col', atCol, count, ownScope(sheet));
     }
 
     newCells[newKey] = {
@@ -164,7 +170,7 @@ export function deleteCol(sheet: Sheet, atCol: number, count = 1): Sheet {
 
     let raw = cell.raw;
     if (raw && raw.startsWith('=')) {
-      raw = shiftFormulaOnDelete(raw, 'col', atCol, count);
+      raw = shiftFormulaOnDelete(raw, 'col', atCol, count, ownScope(sheet));
     }
 
     newCells[newKey] = {
@@ -216,7 +222,7 @@ export function countFormulasReferencingRow(sheet: Sheet, atRow: number, count =
     if (p.r >= atRow && p.r <= deleteEnd) continue;
 
     if (cell.raw && cell.raw.startsWith('=')) {
-      const shifted = shiftFormulaOnDelete(cell.raw, 'row', atRow, count);
+      const shifted = shiftFormulaOnDelete(cell.raw, 'row', atRow, count, ownScope(sheet));
       if (shifted.includes('#REF!') && !cell.raw.includes('#REF!')) {
         affectedCount++;
       }
@@ -240,7 +246,7 @@ export function countFormulasReferencingCol(sheet: Sheet, atCol: number, count =
     if (p.c >= atCol && p.c <= deleteEnd) continue;
 
     if (cell.raw && cell.raw.startsWith('=')) {
-      const shifted = shiftFormulaOnDelete(cell.raw, 'col', atCol, count);
+      const shifted = shiftFormulaOnDelete(cell.raw, 'col', atCol, count, ownScope(sheet));
       if (shifted.includes('#REF!') && !cell.raw.includes('#REF!')) {
         affectedCount++;
       }
@@ -248,4 +254,77 @@ export function countFormulasReferencingCol(sheet: Sheet, atCol: number, count =
   }
 
   return affectedCount;
+}
+
+function countRefErrors(formula: string): number {
+  return formula.split('#REF!').length - 1;
+}
+
+/**
+ * ปรับสูตรในชีตอื่นทุกชีตที่อ้างถึงชีต sheetIndex เมื่อแทรก/ลบแถว-คอลัมน์ในชีตนั้น
+ * แก้ไขสมุดงานโดยตรง และคืน patch ของเซลที่เปลี่ยน (สำหรับ Undo/Redo)
+ */
+export function adjustOtherSheetsForRowCol(
+  wb: Workbook,
+  sheetIndex: number,
+  op: 'insert' | 'delete',
+  axis: 'row' | 'col',
+  index: number,
+  count = 1
+): SheetCellPatch[] {
+  const target = wb.sheets[sheetIndex];
+  if (!target) return [];
+  const patches: SheetCellPatch[] = [];
+
+  wb.sheets.forEach((sheet, si) => {
+    if (si === sheetIndex) return;
+    const scope: RefScope = { formulaSheet: sheet.name, targetSheet: target.name };
+
+    for (const [key, cell] of Object.entries(sheet.cells)) {
+      if (!cell.raw || !cell.raw.startsWith('=')) continue;
+      const raw =
+        op === 'insert'
+          ? shiftFormulaOnInsert(cell.raw, axis, index, count, scope)
+          : shiftFormulaOnDelete(cell.raw, axis, index, count, scope);
+      if (raw !== cell.raw) {
+        const before = { ...cell };
+        sheet.cells[key] = { ...cell, raw };
+        patches.push({ sheetIndex: si, key, before, after: { ...sheet.cells[key] } });
+      }
+    }
+  });
+
+  return patches;
+}
+
+/**
+ * จำนวนสูตรในทุกชีตที่จะกลายเป็น #REF! ถ้าลบแถว/คอลัมน์ในชีต sheetIndex
+ * (ไม่นับเซลที่อยู่ในแถว/คอลัมน์ที่ถูกลบเอง)
+ */
+export function countFormulasBrokenByDelete(
+  wb: Workbook,
+  sheetIndex: number,
+  axis: 'row' | 'col',
+  index: number,
+  count = 1
+): number {
+  const target = wb.sheets[sheetIndex];
+  if (!target) return 0;
+
+  let total =
+    axis === 'row'
+      ? countFormulasReferencingRow(target, index, count)
+      : countFormulasReferencingCol(target, index, count);
+
+  wb.sheets.forEach((sheet, si) => {
+    if (si === sheetIndex) return;
+    const scope: RefScope = { formulaSheet: sheet.name, targetSheet: target.name };
+    for (const cell of Object.values(sheet.cells)) {
+      if (!cell.raw || !cell.raw.startsWith('=')) continue;
+      const shifted = shiftFormulaOnDelete(cell.raw, axis, index, count, scope);
+      if (countRefErrors(shifted) > countRefErrors(cell.raw)) total++;
+    }
+  });
+
+  return total;
 }

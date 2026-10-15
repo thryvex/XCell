@@ -284,3 +284,123 @@ describe('Phase 4B: คัดลอก/ตัด ข้ามชีต', () => {
     expect(S().workbook.sheets[0].cells['A1'].raw).toBe('ย้าย');
   });
 });
+
+describe('Phase 4B ขั้น 2: สูตรข้ามชีตกับการจัดการชีตใน store', () => {
+  function setupReferencingWorkbook() {
+    S().newWorkbook(); // ชีต1
+    S().addSheet(); // ชีต2 (active)
+    typeInto(0, 0, '100');
+    typeInto(1, 0, '200');
+    S().switchSheet(0);
+    typeInto(0, 0, '=ชีต2!A1*2');
+    typeInto(1, 0, "=SUM('ชีต2'!A1:A2)+A1");
+    typeInto(2, 0, '=ชีต2!$A$2');
+    typeInto(3, 0, '=A1');
+  }
+
+  const rawsOfSheet1 = () => {
+    const cells = S().workbook.sheets[0].cells;
+    return ['A1', 'A2', 'A3', 'A4'].map((k) => cells[k]?.raw);
+  };
+
+  it('formulas compute across sheets in the store and recalc on edit', () => {
+    setupReferencingWorkbook();
+    expect(S().getComputedValue(0, 0)).toBe(200);
+    expect(S().getComputedValue(1, 0)).toBe(500);
+    S().switchSheet(1);
+    typeInto(0, 0, '1');
+    S().switchSheet(0);
+    expect(S().getComputedValue(0, 0)).toBe(2);
+    expect(S().getComputedValue(1, 0)).toBe(203);
+  });
+
+  it('delete warns with the number of referencing formulas', () => {
+    setupReferencingWorkbook();
+    S().deleteSheet(1);
+    expect(S().pendingDeleteSheet?.referencingFormulaCount).toBe(3);
+    S().cancelDeleteSheet();
+  });
+
+  it('delete turns refs into #REF!, undo restores every formula exactly, redo deletes again', () => {
+    setupReferencingWorkbook();
+    const original = rawsOfSheet1();
+
+    S().deleteSheet(1);
+    S().confirmDeleteSheet();
+    expect(rawsOfSheet1()).toEqual(['=#REF!*2', '=SUM(#REF!)+A1', '=#REF!', '=A1']);
+    expect(S().getComputedValue(0, 0)).toBe('#REF!');
+
+    S().undo();
+    expect(S().workbook.sheets.map((s) => s.name)).toEqual(['ชีต1', 'ชีต2']);
+    expect(rawsOfSheet1()).toEqual(original);
+    S().switchSheet(0);
+    expect(S().getComputedValue(1, 0)).toBe(500);
+
+    S().redo();
+    expect(rawsOfSheet1()).toEqual(['=#REF!*2', '=SUM(#REF!)+A1', '=#REF!', '=A1']);
+  });
+
+  it('rename rewrites formulas, undo restores the exact original text', () => {
+    setupReferencingWorkbook();
+    const original = rawsOfSheet1();
+
+    expect(S().renameSheet(1, 'ยอด ขาย').success).toBe(true);
+    expect(rawsOfSheet1()).toEqual([
+      "='ยอด ขาย'!A1*2",
+      "=SUM('ยอด ขาย'!A1:A2)+A1",
+      "='ยอด ขาย'!$A$2",
+      '=A1',
+    ]);
+    S().switchSheet(0);
+    expect(S().getComputedValue(0, 0)).toBe(200);
+
+    S().undo();
+    expect(rawsOfSheet1()).toEqual(original);
+    expect(S().workbook.sheets[1].name).toBe('ชีต2');
+
+    S().redo();
+    expect(S().workbook.sheets[1].name).toBe('ยอด ขาย');
+    expect(rawsOfSheet1()[0]).toBe("='ยอด ขาย'!A1*2");
+  });
+
+  it('inserting a row in ชีต2 shifts refs in ชีต1, undo restores them', () => {
+    setupReferencingWorkbook();
+    const original = rawsOfSheet1();
+    S().switchSheet(1);
+    S().insertRowAt(0);
+    expect(rawsOfSheet1()).toEqual(['=ชีต2!A2*2', "=SUM('ชีต2'!A2:A3)+A1", '=ชีต2!$A$3', '=A1']);
+    S().switchSheet(0);
+    expect(S().getComputedValue(0, 0)).toBe(200);
+
+    S().undo();
+    expect(rawsOfSheet1()).toEqual(original);
+    expect(S().activeSheetIndex).toBe(1);
+  });
+
+  it('inserting a row in ชีต1 does not touch its refs to ชีต2', () => {
+    setupReferencingWorkbook();
+    S().insertRowAt(0);
+    const cells = S().workbook.sheets[0].cells;
+    expect(cells['A2'].raw).toBe('=ชีต2!A1*2');
+    expect(cells['A5'].raw).toBe('=A2');
+  });
+
+  it('duplicate keeps qualified refs pointing at the original sheet', () => {
+    setupReferencingWorkbook();
+    S().duplicateSheet(0);
+    expect(S().workbook.sheets[1].name).toBe('สำเนาของ ชีต1');
+    expect(S().getRawValue(0, 0)).toBe('=ชีต2!A1*2');
+    expect(S().getComputedValue(0, 0)).toBe(200);
+  });
+
+  it('pasting a formula on another sheet makes unqualified refs point to the destination', async () => {
+    setupReferencingWorkbook();
+    S().setActiveCell(3, 0); // =A1
+    S().copySelection();
+    S().switchSheet(1);
+    S().setActiveCell(3, 0);
+    await S().paste(false);
+    expect(S().getRawValue(3, 0)).toBe('=A1');
+    expect(S().getComputedValue(3, 0)).toBe(100); // A1 ของชีต2
+  });
+});
