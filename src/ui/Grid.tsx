@@ -6,12 +6,12 @@ import { FilterMenu } from './FilterMenu';
 import { colToStr, cellToA1, parseRange } from '../core/address';
 import { tokenize } from '../core/tokenizer';
 import { sameSheetName, formatSheetReference } from '../core/sheetName';
-import { MergeRange } from '../core/model';
+import { MergeRange, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX } from '../core/model';
 import { th } from '../i18n/th';
 import { formatDate, todaySerial } from '../core/numfmt';
 
-const DEFAULT_COL_WIDTH = 110;
-const DEFAULT_ROW_HEIGHT = 28;
+const DEFAULT_COL_WIDTH = DEFAULT_COL_WIDTH_PX;
+const DEFAULT_ROW_HEIGHT = DEFAULT_ROW_HEIGHT_PX;
 const HEADER_ROW_HEIGHT = 28;
 const HEADER_COL_WIDTH = 45;
 

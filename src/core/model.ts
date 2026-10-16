@@ -83,8 +83,15 @@ export type Workbook = {
   sheets: Sheet[];
   activeSheet: number;
   unsupportedFeatures?: string[];
+  /** ไฟล์ .xlsx ที่เปิดมามีกราฟ (มีไฟล์ใต้ xl/charts/) ซึ่งจะหายเมื่อบันทึกทับ */
+  sourceHasCharts?: boolean;
   printSettings?: PrintSettings; // ตัวเลือกพิมพ์ล่าสุดของไฟล์ (5B)
 };
+
+/** ขนาดเริ่มต้นของคอลัมน์/แถวในตาราง (px) และความกว้างคอลัมน์ต่ำสุด */
+export const DEFAULT_COL_WIDTH_PX = 110;
+export const DEFAULT_ROW_HEIGHT_PX = 28;
+export const MIN_COL_WIDTH_PX = 30;
 
 export type PaperSize = 'A4' | 'Letter' | 'A5';
 export type PrintMargins = 'normal' | 'narrow' | 'wide';

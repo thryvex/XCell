@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import {
   Workbook,
   Sheet,
@@ -12,6 +13,9 @@ import {
   PaperSize,
   PrintMargins,
   DEFAULT_PRINT_SETTINGS,
+  DEFAULT_COL_WIDTH_PX,
+  DEFAULT_ROW_HEIGHT_PX,
+  MIN_COL_WIDTH_PX,
 } from './model';
 import { MARGINS_MM } from './paginate';
 import { Evaluator } from './evaluator';
@@ -29,6 +33,40 @@ const NUM_FMT_EXCEL: Record<string, string> = {
   percent: '0.00%',
   date: 'dd/mm/yyyy',
 };
+
+/**
+ * ความกว้างคอลัมน์: 1 หน่วยของ .xlsx = 7 px (ตรงกับที่ Google Sheets แปลง)
+ * ความสูงแถว: pt = px × 0.75; ทั้งสองค่าเขียนเป็นทศนิยม 2 ตำแหน่ง เพื่อให้เปิดกลับมาได้ px เท่าเดิม
+ */
+const PX_PER_WIDTH_UNIT = 7;
+const PT_PER_PX = 0.75;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+export function pxToColWidth(px: number): number {
+  return round2(Math.max(MIN_COL_WIDTH_PX, px) / PX_PER_WIDTH_UNIT);
+}
+export function colWidthToPx(width: number): number {
+  return Math.round(width * PX_PER_WIDTH_UNIT);
+}
+export function pxToRowHeight(px: number): number {
+  return round2(px * PT_PER_PX);
+}
+export function rowHeightToPx(pt: number): number {
+  return Math.round(pt / PT_PER_PX);
+}
+
+/** ชื่อไฟล์ในซิปที่บอกว่าไฟล์มีกราฟ (ดูแค่ชื่อไฟล์ ไม่อ่าน XML) */
+const CHART_PART_PREFIX = 'xl/charts/';
+
+/** ตรวจว่าไฟล์ .xlsx มีกราฟหรือไม่ จากรายชื่อไฟล์ในซิป */
+export async function xlsxHasCharts(data: Uint8Array): Promise<boolean> {
+  try {
+    const zip = await JSZip.loadAsync(data);
+    return Object.keys(zip.files).some((name) => name.startsWith(CHART_PART_PREFIX) && !zip.files[name].dir);
+  } catch {
+    return false;
+  }
+}
 
 function argbToHex(argb?: string): string | undefined {
   if (!argb) return undefined;
@@ -73,6 +111,11 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
   for (const [sheetIndex, sheetModel] of wbModel.sheets.entries()) {
     const ws = excelWorkbook.addWorksheet(sheetModel.name || 'Sheet1', {
       state: sheetModel.hidden ?? 'visible',
+      // ค่าเริ่มต้นของคอลัมน์/แถวที่ไม่ได้ตั้ง (sheetFormatPr) ให้ตรงกับขนาดเริ่มต้นในแอป
+      properties: {
+        defaultColWidth: pxToColWidth(DEFAULT_COL_WIDTH_PX),
+        defaultRowHeight: pxToRowHeight(DEFAULT_ROW_HEIGHT_PX),
+      },
     });
     const tabSelected = sheetIndex === activeSheet;
 
@@ -88,16 +131,14 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
     for (const [colIdxStr, widthPx] of Object.entries(sheetModel.colWidths)) {
       const colIdx = parseInt(colIdxStr, 10);
       const col = ws.getColumn(colIdx + 1);
-      // Rough conversion: 1 Excel width unit ~ 7.5 - 8 px
-      col.width = Math.max(8, Math.round(widthPx / 8));
+      col.width = pxToColWidth(widthPx);
     }
 
     // Apply row heights
     for (const [rowIdxStr, heightPx] of Object.entries(sheetModel.rowHeights)) {
       const rowIdx = parseInt(rowIdxStr, 10);
       const row = ws.getRow(rowIdx + 1);
-      // 1 pt ~ 1.33 px
-      row.height = Math.round(heightPx * 0.75);
+      row.height = pxToRowHeight(heightPx);
     }
 
     // Apply cells
@@ -324,15 +365,15 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
       if (z !== 100) sheet.zoom = z;
     }
 
-    // Column widths / row heights (กลับด้านกับตอนเขียน: width × 8 px, height pt ÷ 0.75)
+    // Column widths / row heights (กลับด้านกับตอนเขียน: width × 7 px, height pt ÷ 0.75)
     ws.columns?.forEach((col, idx) => {
       if (col && typeof col.width === 'number' && (col as any).isCustomWidth !== false) {
-        sheet.colWidths[idx] = Math.round(col.width * 8);
+        sheet.colWidths[idx] = colWidthToPx(col.width);
       }
     });
     ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
       if (typeof row.height === 'number' && row.height > 0) {
-        sheet.rowHeights[rowNumber - 1] = Math.round(row.height / 0.75);
+        sheet.rowHeights[rowNumber - 1] = rowHeightToPx(row.height);
       }
     });
 
@@ -489,7 +530,14 @@ export async function importFromXlsxBuffer(data: Uint8Array): Promise<Workbook> 
   const excelWb = new ExcelJS.Workbook();
   // ExcelJS รับ Uint8Array ได้จริง แต่ type ประกาศเป็น Buffer ของ Node
   await excelWb.xlsx.load(data as unknown as Parameters<typeof excelWb.xlsx.load>[0]);
-  return await excelJSToWorkbook(excelWb);
+  const wb = await excelJSToWorkbook(excelWb);
+  // ExcelJS ทิ้งกราฟตั้งแต่ตอนอ่าน จึงตรวจจากชื่อไฟล์ในซิปแทน และเตือนเรื่องกราฟแยกจากรายการอื่น
+  if (await xlsxHasCharts(data)) {
+    wb.sourceHasCharts = true;
+    const others = (wb.unsupportedFeatures ?? []).filter((f) => f !== 'แผนภูมิ/กราฟ');
+    wb.unsupportedFeatures = others.length > 0 ? others : undefined;
+  }
+  return wb;
 }
 
 /** แปลงค่า autoFilter ของ ExcelJS ("A1:C10" หรือ {from, to}) เป็นช่วง 0-based */

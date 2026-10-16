@@ -12,6 +12,7 @@ import {
   ColumnFilter,
   PrintSettings,
   DEFAULT_PRINT_SETTINGS,
+  MIN_COL_WIDTH_PX,
 } from '../core/model';
 import { Evaluator } from '../core/evaluator';
 import {
@@ -224,6 +225,9 @@ export interface SheetState {
   hasWarnedUnsupportedOverwrite: boolean;
   setHasWarnedUnsupportedOverwrite: (warned: boolean) => void;
   dismissUnsupportedBanner: () => void;
+  /** ปิดแถบเตือนเรื่องกราฟ (กล่องยืนยันตอนบันทึกทับยังขึ้นตาม workbook.sourceHasCharts) */
+  chartBannerDismissed: boolean;
+  dismissChartBanner: () => void;
   loadTemplate: (wb: Workbook, templateName: string) => void;
 
   // Phase 4B: หลายชีต
@@ -396,6 +400,7 @@ function freshWorkbookState(wb: Workbook, activeCell = { r: 0, c: 0 }) {
     cutRange: null,
     pendingDelete: null,
     pendingDeleteSheet: null,
+    chartBannerDismissed: false,
     search: closedSearch,
     filteredRowsNotice: false,
     pendingSort: null,
@@ -847,6 +852,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   unsupportedFeatures: [],
   hiddenSheetNotice: 0,
   hasWarnedUnsupportedOverwrite: false,
+  chartBannerDismissed: false,
   sheetViews: { [initialWb.sheets[0].id!]: defaultSheetView() },
   pendingDeleteSheet: null,
   search: closedSearch,
@@ -1471,7 +1477,11 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const fileName = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'ตารางบันทึก';
     get().addRecentFile(filePath);
     get().clearRecoverySnapshot();
+    // ไฟล์ปลายทางที่เพิ่งบันทึกไม่มีกราฟแล้ว (แอปไม่ได้เขียนกราฟ) จึงไม่ต้องเตือนอีก
+    const { workbook } = get();
+    if (workbook.sourceHasCharts) delete workbook.sourceHasCharts;
     set({
+      workbook: { ...workbook },
       filePath,
       fileName,
       isDirty: false,
@@ -1562,6 +1572,10 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   dismissUnsupportedBanner: () => {
     set({ unsupportedFeatures: [], hiddenSheetNotice: 0 });
+  },
+
+  dismissChartBanner: () => {
+    set({ chartBannerDismissed: true });
   },
 
   loadTemplate: (wb: Workbook, templateName: string) => {
@@ -2332,7 +2346,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   setColWidth: (colIdx: number, width: number) => {
     const { workbook, activeSheetIndex } = get();
     const sheet = workbook.sheets[activeSheetIndex];
-    sheet.colWidths[colIdx] = Math.max(30, width);
+    sheet.colWidths[colIdx] = Math.max(MIN_COL_WIDTH_PX, width);
     set({ workbook: { ...workbook }, isDirty: true });
   },
 

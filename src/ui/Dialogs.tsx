@@ -294,6 +294,8 @@ interface UnsupportedOverwriteDialogProps {
   onOverwrite: () => void;
   onSaveAs: () => void;
   onCancel: () => void;
+  /** ใช้ข้อความของไฟล์ที่มีกราฟแทนข้อความส่วนที่ไม่รองรับทั่วไป */
+  charts?: boolean;
 }
 
 export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProps> = ({
@@ -302,8 +304,13 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
   onOverwrite,
   onSaveAs,
   onCancel,
+  charts,
 }) => {
   if (!isOpen) return null;
+  const title = charts ? th.dialog.chartOverwriteTitle : th.dialog.overwriteWarningTitle;
+  const prompt = charts
+    ? th.dialog.chartOverwritePrompt
+    : th.dialog.overwriteWarningPrompt.replace('{features}', features.join(', '));
 
   return (
     <div
@@ -335,10 +342,10 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
         }}
       >
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--color-warning)' }}>
-          ⚠️ {th.dialog.overwriteWarningTitle}
+          ⚠️ {title}
         </h3>
         <p style={{ margin: 0, color: 'var(--fg-main)', lineHeight: 1.5, fontSize: '14px' }}>
-          {th.dialog.overwriteWarningPrompt.replace('{features}', features.join(', '))}
+          {prompt}
         </p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
           <button onClick={onCancel}>{th.dialog.cancel}</button>
@@ -354,9 +361,9 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
             }}
             onClick={onOverwrite}
           >
-            {th.dialog.overwrite}
+            {charts ? th.dialog.chartOverwrite : th.dialog.overwrite}
           </button>
-          <button className="primary" onClick={onSaveAs}>
+          <button className="primary" onClick={onSaveAs} autoFocus={charts}>
             💾 {th.dialog.saveAsNew}
           </button>
         </div>

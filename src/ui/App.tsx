@@ -50,6 +50,8 @@ export const App: React.FC = () => {
     hasWarnedUnsupportedOverwrite,
     setHasWarnedUnsupportedOverwrite,
     dismissUnsupportedBanner,
+    chartBannerDismissed,
+    dismissChartBanner,
     loadTemplate,
     fileName,
     beginCsvImport,
@@ -67,6 +69,9 @@ export const App: React.FC = () => {
   const [recoveryList, setRecoveryList] = useState<any[]>([]);
 
   const [unsupportedOverwriteOpen, setUnsupportedOverwriteOpen] = useState(false);
+  const [chartOverwriteOpen, setChartOverwriteOpen] = useState(false);
+  // ไฟล์ต้นฉบับมีกราฟ (ล้างเมื่อบันทึกสำเร็จ) — ไม่ขึ้นกับการปิดแถบเตือน
+  const sourceHasCharts = useSheetStore((s) => Boolean(s.workbook.sourceHasCharts));
 
   // Phase 3D Modal states
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
@@ -466,6 +471,12 @@ export const App: React.FC = () => {
       return handleSaveAs();
     }
 
+    // บันทึกทับไฟล์ต้นฉบับที่มีกราฟ: ถามทุกครั้งจนกว่าจะบันทึกสำเร็จ (หลังจากนั้นไฟล์ไม่มีกราฟแล้ว)
+    if (sourceHasCharts) {
+      setChartOverwriteOpen(true);
+      return false;
+    }
+
     if (unsupportedFeatures.length > 0 && !hasWarnedUnsupportedOverwrite) {
       setUnsupportedOverwriteOpen(true);
       return false;
@@ -783,6 +794,60 @@ export const App: React.FC = () => {
 
       <FormulaBar />
 
+      {/* แถบเตือนไฟล์ที่มีกราฟ (กราฟเลื่อนไป v0.2) */}
+      {sourceHasCharts && !chartBannerDismissed && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: 'var(--banner-warn-bg)',
+            color: 'var(--banner-warn-fg)',
+            borderBottom: '1px solid var(--banner-warn-border)',
+            padding: '7px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+            zIndex: 5,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>⚠️</span>
+            <span>{th.banner.charts}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              style={{
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--banner-warn-border)',
+                color: 'var(--banner-warn-fg)',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+              onClick={handleSaveAs}
+            >
+              💾 {th.banner.saveAsNewBtn}
+            </button>
+            <button
+              style={{
+                padding: '2px 8px',
+                fontSize: '13px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--banner-warn-fg)',
+                cursor: 'pointer',
+              }}
+              onClick={dismissChartBanner}
+              title={th.banner.dismiss}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Unsupported Features Warning Banner (SPEC 6.4) */}
       {(unsupportedFeatures.length > 0 || hiddenSheetNotice > 0) && (
         <div
@@ -967,6 +1032,28 @@ export const App: React.FC = () => {
           setRecoveryDialogOpen(false);
           showToast(th.messages.recoveryDiscarded);
           await checkWelcomeOrTemplate();
+        }}
+      />
+
+      {/* กล่องยืนยันบันทึกทับไฟล์ที่มีกราฟ */}
+      <UnsupportedOverwriteDialog
+        isOpen={chartOverwriteOpen}
+        features={[]}
+        charts
+        onOverwrite={async () => {
+          // ยอมรับว่าส่วนที่ไม่รองรับจะหายแล้ว ไม่ต้องถามซ้ำด้วยกล่องทั่วไป
+          setHasWarnedUnsupportedOverwrite(true);
+          setChartOverwriteOpen(false);
+          if (filePath) {
+            await executeSaveToPath(filePath);
+          }
+        }}
+        onSaveAs={async () => {
+          setChartOverwriteOpen(false);
+          await handleSaveAs();
+        }}
+        onCancel={() => {
+          setChartOverwriteOpen(false);
         }}
       />
 
