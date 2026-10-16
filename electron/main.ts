@@ -33,6 +33,10 @@ function extractFilePathFromArgs(args: string[]): string | null {
   return null;
 }
 
+// Windows: จัดกลุ่มทาสก์บาร์/ทางลัดเมนู Start ด้วย id เดียวกับตัวติดตั้ง (ต้องตรงกับ appId ใน electron-builder.yml)
+const APP_USER_MODEL_ID = 'io.github.bosschaisit.xcell';
+if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
+
 // Single Instance Lock
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -86,6 +90,11 @@ function currentWindowBackground(): string {
   return nativeTheme.shouldUseDarkColors ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light;
 }
 
+// ไอคอนหน้าต่าง/ทาสก์บาร์: ตอนพัฒนาใช้ไฟล์ใน build/ ตอนแพ็กแล้วใช้ extraResources (ดู electron-builder.yml)
+const WINDOW_ICON = app.isPackaged
+  ? path.join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png')
+  : path.join(__dirname, '../build', process.platform === 'win32' ? 'icon.ico' : 'icons/256x256.png');
+
 function createWindow() {
   applyThemePref(getPreferencesSync().theme);
   mainWindow = new BrowserWindow({
@@ -96,6 +105,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'XCell',
+    icon: WINDOW_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

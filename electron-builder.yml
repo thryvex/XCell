@@ -7,7 +7,14 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - package.json
+# ไอคอนหน้าต่าง/ทาสก์บาร์ที่ main.ts โหลดตอนรัน (โฟลเดอร์ build/ ไม่ถูกแพ็กไปกับแอป)
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
+  - from: build/icons/256x256.png
+    to: icon.png
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
@@ -16,6 +23,7 @@ win:
       arch:
         - x64
 mac:
+  icon: build/icon.png
   target:
     - target: dmg
       arch:
@@ -31,5 +39,11 @@ fileAssociations:
     description: Comma Separated Values
     role: Editor
 nsis:
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: XCell
   oneClick: false
   allowToChangeInstallationDirectory: true
