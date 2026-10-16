@@ -19,6 +19,14 @@
     "electron"
   ],
   "author": "XCell Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bosschaisit/XCell.git"
+  },
+  "homepage": "https://github.com/bosschaisit/XCell#readme",
+  "bugs": {
+    "url": "https://github.com/bosschaisit/XCell/issues"
+  },
   "license": "MIT",
   "dependencies": {
     "@fontsource/sarabun": "^5.1.0",

@@ -1,0 +1,23 @@
+# สร้างตัวติดตั้ง Windows และแนบไว้ที่ GitHub Releases เมื่อ push tag รูปแบบ v* (เช่น v0.1.0) — SPEC 13.2
+# v0.1.0 รองรับเฉพาะ Windows (ไม่ build macOS)
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

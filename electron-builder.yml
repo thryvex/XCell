@@ -1,5 +1,11 @@
 appId: io.github.bosschaisit.xcell
 productName: XCell
+# เวอร์ชันมาจาก package.json ("version": "0.1.0") — electron-builder ไม่มีช่องเวอร์ชันในไฟล์นี้
+# ที่เผยแพร่ตัวติดตั้ง (GitHub Releases ของ repo XCell)
+publish:
+  provider: github
+  owner: bosschaisit
+  repo: XCell
 directories:
   output: release
   buildResources: build

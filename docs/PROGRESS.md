@@ -381,7 +381,22 @@
   * ข้อสังเกต: สูตรเก็บตัวพิมพ์ตามที่พิมพ์/ตามไฟล์ (`=sum(G:G)` ไม่ถูกแปลงเป็นตัวใหญ่) ซึ่งเป็นพฤติกรรมเดิมของแอป (Google Sheets แปลงเป็นตัวใหญ่)
   * **ยังไม่ทำ/ยังไม่ได้ทดสอบ:** point mode เลือกทั้งคอลัมน์ (คลิกหัวคอลัมน์ขณะพิมพ์สูตร), อ้างทั้งแถว `1:1`, `COUNTIF(A:A,"")` นับเฉพาะแถวที่มีเซลในชีต ไม่ใช่ทั้งล้านแถวแบบ Google Sheets, ไฟล์ต้นแบบจริงของเจ้าของโปรเจกต์, เปิดใน Google Sheets/Excel
 
-* **สถานะ:** กำลังทำ — ก้อน 5A, 5B และ 5C เสร็จรอตรวจ, 5D เลื่อนไป v0.2, แก้ไข `fix/widths-chart-warning` และเทมเพลต `feature/product-template` รวมเข้า `main` ในเครื่องแล้ว, `feature/ui-polish` รอตรวจ
+* **เตรียมปล่อย `release/v0.1.0`:** แตกจาก `main` (`56e1350` หลัง merge `feature/column-ranges`) ยังไม่ติด tag ยังไม่ push
+  * README ภาษาไทยเขียนใหม่: XCell คืออะไร, ติดตั้ง Windows + ผ่าน SmartScreen (More info → Run anyway), เปิดด้วย / Google Sheets, ข้อจำกัด v0.1.0 (กราฟ, ความกว้างคอลัมน์ว่างใน Google Sheets, Windows เท่านั้น, ไม่มี virtual scrolling, ส่วนที่ไม่รองรับในไฟล์, ยังไม่ได้ทดสอบกับ Microsoft Excel); ตัดคำอ้างเดิม "ออฟไลน์ 100%" และ "ใช้ต่อใน Microsoft Excel ได้อย่างสมบูรณ์แบบ"
+  * เวอร์ชัน 0.1.0 อยู่ใน `package.json`; `electron-builder.yml` ไม่มีช่องเวอร์ชัน (อ่านจาก package.json) จึงใส่หมายเหตุไว้แทน
+  * `.github/workflows/release.yml` **ไม่มีอยู่เดิม** จึงสร้างใหม่ตาม SPEC 13.2 แบบ Windows อย่างเดียว (`windows-latest`, `npx electron-builder --win --publish always` เมื่อ push tag `v*`); ยังไม่ได้ตรวจว่า action เวอร์ชัน v4 เป็นรุ่นล่าสุด และยังไม่เคยรันบน GitHub
+  * ชื่อ repo XCell: `package.json` เพิ่ม `repository`/`homepage`/`bugs` (เดิมไม่มี) ชี้ `github.com/bosschaisit/XCell`; `electron-builder.yml` เพิ่ม `publish` (github, bosschaisit/XCell) — เดิม electron-builder เดาจาก git remote ซึ่งยังเป็น `sheeteasy`; ไม่ได้แตะ git remote และชื่อโฟลเดอร์ (repo บน GitHub ยังชื่อ sheeteasy จนกว่าเจ้าของโปรเจกต์จะเปลี่ยน)
+  * `.gitignore` มี `release/` และ `build/Neon Xcel Spreadsheet Logo.png` (ตรวจด้วย `git check-ignore`)
+  * ตัวติดตั้งใหม่: `release/XCell Setup 0.1.0.exe` 88,834,172 ไบต์ (84.7 MB), `release/XCell 0.1.0.exe` (portable) 88,569,079 ไบต์ (84.5 MB); `resources/app-update.yml` ชี้ bosschaisit/XCell; 561 เทสต์ผ่าน, `tsc` ผ่าน
+  * "Open with": ตัวติดตั้งลงทะเบียนแบบ `OpenWithProgids` + `ApplicationsXCell.exeSupportedTypes` ไม่เขียนค่าเริ่มต้นของ `.xlsx`/`.csv` (`build/installer.nsh` ตั้งแต่ `fix/installer-open-with`) — **ยังไม่ได้ทดสอบจริง** เพราะยังไม่ได้ติดตั้งในเครื่อง (ตรวจ registry แล้วไม่มีรายการของ XCell)
+  * ยังไม่มี `CHANGELOG.md` ตาม SPEC 13.3 และ README ยังไม่มีภาพหน้าจอ (SPEC 13.3) — ไม่อยู่ในขอบเขตข้อความนี้
+
+* **สถานะการยืนยัน (ณ release/v0.1.0):**
+  * **เจ้าของโปรเจกต์แจ้งว่าตรวจแล้วผ่าน:** Phase 0–5C (2026-10-16), เทมเพลตรายการสินค้าใหม่, ไอคอนและ UI (ui-polish + rebrand XCell), ตัด-วางแล้ว reference ตามไป (5a), ปุ่มเลื่อนในตาราง (5b), อ้างทั้งคอลัมน์ A:A (5c)
+  * **ยังเป็นการวัด/ทดสอบโดย AI เท่านั้น (เจ้าของโปรเจกต์ยังไม่ได้แจ้งผล):** ผลทดลองความกว้างคอลัมน์ใน Google Sheets (V1–V7) และการแปลง 7 px ต่อหน่วย, คำเตือนกราฟตอนเปิด/บันทึกทับ, ตัวติดตั้ง Windows (ติดตั้ง/ถอนการติดตั้ง/"Open with"/ทางลัดเมนู Start ยังไม่มีใครทดสอบ), การเปิดไฟล์ที่ XCell บันทึกใน Google Sheets หลังแก้ความกว้างและหลังเพิ่ม A:A
+  * **ยังไม่มีใครทดสอบ:** เปิดไฟล์ใน Microsoft Excel, macOS, ไฟล์ต้นแบบจริงที่ใช้ `=sum(G:G)` ของเจ้าของโปรเจกต์
+
+* **สถานะ:** เตรียมปล่อย v0.1.0 บน `release/v0.1.0` (รอเจ้าของโปรเจกต์ทดสอบตัวติดตั้งและเปลี่ยนชื่อ repo ก่อนติด tag); 5D (กราฟ) เลื่อนไป v0.2
 
 ---
 
