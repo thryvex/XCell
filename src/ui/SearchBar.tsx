@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSheetStore } from './store';
 import { th } from '../i18n/th';
+import { IconChevronDown, IconChevronUp, IconClose, IconOptions } from './icons';
 import { SearchOptions } from '../core/search';
 
 /**
@@ -100,20 +101,20 @@ export const SearchBar: React.FC = () => {
           {status}
         </span>
         <button style={iconButton} title={th.search.prev} onClick={searchPrev} disabled={total === 0}>
-          ▲
+          <IconChevronUp />
         </button>
         <button style={iconButton} title={th.search.next} onClick={searchNext} disabled={total === 0}>
-          ▼
+          <IconChevronDown />
         </button>
         <button
           style={{ ...iconButton, fontWeight: showOptions ? 700 : 400 }}
           title={th.search.options}
           onClick={() => setShowOptions((v) => !v)}
         >
-          ⚙
+          <IconOptions />
         </button>
         <button style={iconButton} title={th.search.close} onClick={closeSearch}>
-          ✕
+          <IconClose />
         </button>
       </div>
       {showOptions && (

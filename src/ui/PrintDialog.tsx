@@ -163,7 +163,7 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
       >
         {/* ตัวเลือก */}
         <div style={{ width: '250px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
-          <h3 style={{ margin: 0, fontSize: '16px' }}>🖨 {th.print.title}</h3>
+          <h3 style={{ margin: 0, fontSize: '16px' }}>{th.print.title}</h3>
 
           <div style={row}>
             <span style={label}>{th.print.what}</span>
@@ -247,10 +247,10 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
 
           {total > MANY_PAGES_WARNING && (
             <div role="alert" style={{ color: 'var(--color-warning)' }}>
-              ⚠️ {th.print.manyPages.replace('{count}', total.toLocaleString('th-TH'))}
+              {th.print.manyPages.replace('{count}', total.toLocaleString('th-TH'))}
             </div>
           )}
-          {job.mergeSplit && <div style={{ color: 'var(--color-warning)' }}>⚠️ {th.print.mergeSplit}</div>}
+          {job.mergeSplit && <div style={{ color: 'var(--color-warning)' }}>{th.print.mergeSplit}</div>}
           {error && (
             <div role="alert" style={{ color: 'var(--color-danger)' }}>
               {error}
@@ -267,10 +267,10 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({ isOpen, focus, onClose
               style={{ fontWeight: 600 }}
               title={total === 0 ? th.print.noData : undefined}
             >
-              🖨 {th.print.printButton}
+              {th.print.printButton}
             </button>
             <button autoFocus={focus === 'pdf'} disabled={disabled} onClick={() => run('pdf')}>
-              📄 {th.print.pdfButton}
+              {th.print.pdfButton}
             </button>
             <button onClick={onClose} disabled={busy}>
               {th.dialog.cancel}

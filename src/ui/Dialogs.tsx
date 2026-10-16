@@ -127,7 +127,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
         }}
       >
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--fg-main)' }}>
-          ⚠️ {th.dialog.unsavedChangesTitle}
+          {th.dialog.unsavedChangesTitle}
         </h3>
         <p style={{ margin: 0, color: 'var(--fg-main)', lineHeight: 1.5 }}>
           {th.dialog.confirmUnsaved}
@@ -149,7 +149,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
             {th.dialog.dontSave}
           </button>
           <button className="primary" onClick={onSave}>
-            💾 {th.dialog.save}
+            {th.dialog.save}
           </button>
         </div>
       </div>
@@ -204,7 +204,7 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
         }}
       >
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--color-primary)' }}>
-          🔄 {th.dialog.foundRecoveryTitle}
+          {th.dialog.foundRecoveryTitle}
         </h3>
         <p style={{ margin: 0, color: 'var(--fg-main)', lineHeight: 1.5, fontSize: '14px' }}>
           {th.dialog.foundRecoveryPrompt}
@@ -247,10 +247,10 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--fg-main)' }}>
-                    📄 {item.fileName || 'ตารางไม่ระบุชื่อ'}
+                    {item.fileName || th.dialog.recoveryUnnamed}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--fg-muted)' }}>
-                    {item.originalPath || '(ยังไม่เคยบันทึกเป็นไฟล์)'}
+                    {item.originalPath || th.dialog.recoveryNeverSaved}
                   </div>
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--fg-muted)', textAlign: 'right' }}>
@@ -274,13 +274,13 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
             }}
             onClick={onDiscard}
           >
-            🗑️ {th.dialog.discard}
+            {th.dialog.discard}
           </button>
           <button
             className="primary"
             onClick={() => onRecover(recoveryItems[selectedIndex])}
           >
-            ✓ {th.dialog.recover}
+            {th.dialog.recover}
           </button>
         </div>
       </div>
@@ -342,7 +342,7 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
         }}
       >
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--color-warning)' }}>
-          ⚠️ {title}
+          {title}
         </h3>
         <p style={{ margin: 0, color: 'var(--fg-main)', lineHeight: 1.5, fontSize: '14px' }}>
           {prompt}
@@ -364,7 +364,7 @@ export const UnsupportedOverwriteDialog: React.FC<UnsupportedOverwriteDialogProp
             {charts ? th.dialog.chartOverwrite : th.dialog.overwrite}
           </button>
           <button className="primary" onClick={onSaveAs} autoFocus={charts}>
-            💾 {th.dialog.saveAsNew}
+            {th.dialog.saveAsNew}
           </button>
         </div>
       </div>

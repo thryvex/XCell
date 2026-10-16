@@ -21,6 +21,7 @@ import { needsLowContrastWarning, WINDOW_BACKGROUND, ThemePref } from '../core/t
 import { CsvImportDialog } from './CsvImportDialog';
 import { PrintDialog } from './PrintDialog';
 import { th } from '../i18n/th';
+import { IconClose } from './icons';
 import { createLedgerWorkbook, createInventoryWorkbook } from '../templates';
 
 export const App: React.FC = () => {
@@ -775,7 +776,7 @@ export const App: React.FC = () => {
             pointerEvents: 'none',
           }}
         >
-          📂 วางไฟล์ .xlsx หรือ .csv เพื่อเปิดใน SheetEasy
+          {th.messages.dropToOpen}
         </div>
       )}
 
@@ -811,7 +812,6 @@ export const App: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>⚠️</span>
             <span>{th.banner.charts}</span>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -828,7 +828,7 @@ export const App: React.FC = () => {
               }}
               onClick={handleSaveAs}
             >
-              💾 {th.banner.saveAsNewBtn}
+              {th.banner.saveAsNewBtn}
             </button>
             <button
               style={{
@@ -842,7 +842,7 @@ export const App: React.FC = () => {
               onClick={dismissChartBanner}
               title={th.banner.dismiss}
             >
-              ✕
+              <IconClose size={16} />
             </button>
           </div>
         </div>
@@ -864,7 +864,6 @@ export const App: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>⚠️</span>
             <span>
               {unsupportedFeatures.length > 0 &&
                 th.banner.unsupportedFeatures.replace('{features}', unsupportedFeatures.join(', '))}
@@ -888,7 +887,7 @@ export const App: React.FC = () => {
               }}
               onClick={handleSaveAs}
             >
-              💾 {th.banner.saveAsNewBtn}
+              {th.banner.saveAsNewBtn}
             </button>
             )}
             <button
@@ -903,7 +902,7 @@ export const App: React.FC = () => {
               onClick={dismissUnsupportedBanner}
               title={th.banner.dismiss}
             >
-              ✕
+              <IconClose size={16} />
             </button>
           </div>
         </div>
@@ -924,7 +923,7 @@ export const App: React.FC = () => {
             fontSize: '13px',
           }}
         >
-          <span>ℹ️ {th.filter.fileHasFilteredRows}</span>
+          <span>{th.filter.fileHasFilteredRows}</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button onClick={showAllFilteredRows} style={{ fontSize: '12px', fontWeight: 600 }}>
               {th.filter.showAllRows}
@@ -934,7 +933,7 @@ export const App: React.FC = () => {
               title={th.banner.dismiss}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--banner-info-fg)' }}
             >
-              ✕
+              <IconClose size={16} />
             </button>
           </div>
         </div>
@@ -955,7 +954,7 @@ export const App: React.FC = () => {
             fontSize: '13px',
           }}
         >
-          <span>⚠️ {th.theme.lowContrastBanner}</span>
+          <span>{th.theme.lowContrastBanner}</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
               onClick={() => {
@@ -972,7 +971,7 @@ export const App: React.FC = () => {
               aria-label={th.banner.dismiss}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--banner-warn-fg)' }}
             >
-              ✕
+              <IconClose size={16} />
             </button>
           </div>
         </div>
@@ -1126,7 +1125,7 @@ export const App: React.FC = () => {
               boxShadow: 'var(--shadow-dialog)',
             }}
           >
-            <h3 style={{ margin: 0, fontSize: '16px' }}>ℹ️ {th.yearNotice.title}</h3>
+            <h3 style={{ margin: 0, fontSize: '16px' }}>{th.yearNotice.title}</h3>
             <p style={{ margin: 0 }}>{th.yearNotice.message}</p>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input

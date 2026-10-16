@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { th } from '../i18n/th';
+import { IconClose } from './icons';
 import { APP_INFO } from '../appInfo';
 
 interface HelpModalProps {
@@ -63,7 +64,6 @@ export const HelpModal: React.FC<HelpModalProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '20px' }}>❓</span>
             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--fg-main)' }}>
               {th.help.title}
             </h2>
@@ -78,8 +78,10 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               color: 'var(--fg-muted)',
               padding: '2px 8px',
             }}
+          aria-label={th.dialog.close}
+          title={th.dialog.close}
           >
-            ✕
+            <IconClose />
           </button>
         </div>
 
@@ -106,7 +108,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               borderRadius: 0,
             }}
           >
-            🌐 {th.help.tabGoogleSheets}
+            {th.help.tabGoogleSheets}
           </button>
           <button
             onClick={() => setActiveTab('shortcuts')}
@@ -121,7 +123,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               borderRadius: 0,
             }}
           >
-            ⌨️ {th.help.tabShortcuts}
+            {th.help.tabShortcuts}
           </button>
           <button
             onClick={() => setActiveTab('features')}
@@ -136,7 +138,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               borderRadius: 0,
             }}
           >
-            ✨ {th.help.tabFeatures}
+            {th.help.tabFeatures}
           </button>
           <button
             onClick={() => setActiveTab('about')}
@@ -151,7 +153,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               borderRadius: 0,
             }}
           >
-            ℹ️ {th.help.tabAbout}
+            {th.help.tabAbout}
           </button>
         </div>
 
@@ -191,7 +193,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
                   color: 'var(--fg-main)',
                 }}
               >
-                💡 <b>ข้อดี:</b> สูตรคำนวณทั้งหมด, เซลที่ผสาน, สีและฟอนต์ รวมถึงรูปแบบ ฿ บาท จะแสดงผลและทำงานได้ทันทีบน Google Sheets โดยไม่ต้องปรับแต่งเพิ่ม
+                {th.help.gsNote}
               </div>
             </div>
           )}
@@ -216,7 +218,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
           {activeTab === 'shortcuts' && (
             <div>
               <div style={{ marginBottom: '10px', fontSize: '12px', color: 'var(--fg-muted)' }}>
-                * สำหรับผู้ใช้งาน macOS ให้ใช้ปุ่ม <code>Cmd (⌘)</code> แทน <code>Ctrl</code>
+                {th.help.macNote}
               </div>
               <table
                 style={{
@@ -227,8 +229,8 @@ export const HelpModal: React.FC<HelpModalProps> = ({
               >
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '2px solid var(--border-color)' }}>
-                    <th style={{ textAlign: 'left', padding: '8px 10px', width: '220px' }}>คีย์ลัด</th>
-                    <th style={{ textAlign: 'left', padding: '8px 10px' }}>การทำงาน</th>
+                    <th style={{ textAlign: 'left', padding: '8px 10px', width: '220px' }}>{th.help.shortcutKeyHeader}</th>
+                    <th style={{ textAlign: 'left', padding: '8px 10px' }}>{th.help.shortcutActionHeader}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -256,7 +258,6 @@ export const HelpModal: React.FC<HelpModalProps> = ({
           {/* Tab 3: About */}
           {activeTab === 'about' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: '48px' }}>📊</div>
               <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: 'var(--fg-main)' }}>
                 {APP_INFO.name}
               </h3>
@@ -278,7 +279,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
                     onOpenWelcomeGuide();
                   }}
                 >
-                  🚀 {th.help.reopenWelcome}
+                  {th.help.reopenWelcome}
                 </button>
               </div>
             </div>

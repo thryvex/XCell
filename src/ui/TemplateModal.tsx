@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { th } from '../i18n/th';
+import { IconClose } from './icons';
 
 interface TemplateModalProps {
   isOpen: boolean;
@@ -103,9 +104,10 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
               color: 'var(--fg-muted)',
               padding: '2px 8px',
             }}
-            title="ปิด (เริ่มตารางว่าง)"
+            title={th.templates.closeTooltip}
+            aria-label={th.templates.closeTooltip}
           >
-            ✕
+            <IconClose />
           </button>
         </div>
 
@@ -133,7 +135,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
             onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
             onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
           >
-            <div style={{ fontSize: '32px' }}>📄</div>
             <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--color-primary)' }}>
               {th.templates.blank}
             </div>
@@ -167,7 +168,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
               e.currentTarget.style.borderColor = 'var(--border-color)';
             }}
           >
-            <div style={{ fontSize: '32px' }}>💰</div>
             <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--fg-main)' }}>
               {th.templates.ledger}
             </div>
@@ -201,7 +201,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
               e.currentTarget.style.borderColor = 'var(--border-color)';
             }}
           >
-            <div style={{ fontSize: '32px' }}>📦</div>
             <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--fg-main)' }}>
               {th.templates.inventory}
             </div>
@@ -214,7 +213,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         {/* Recent files section */}
         <div style={{ marginTop: '8px' }}>
           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg-main)', marginBottom: '8px' }}>
-            🕒 {th.templates.recentFilesTitle}
+            {th.templates.recentFilesTitle}
           </div>
           {recentFiles.length === 0 ? (
             <div style={{ fontSize: '13px', color: 'var(--fg-muted)', fontStyle: 'italic', padding: '6px 0' }}>
@@ -249,7 +248,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                   >
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--fg-main)' }}>
-                        📄 {baseName}
+                        {baseName}
                       </span>
                       <span style={{ fontSize: '11px', color: 'var(--fg-muted)', marginLeft: '8px' }}>
                         {filePath}

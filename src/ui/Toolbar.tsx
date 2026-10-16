@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { th } from '../i18n/th';
+import { IconAlignCenter, IconAlignLeft, IconAlignRight, IconCheck, IconChevronDown, IconFillColor } from './icons';
+
+/** ช่องเครื่องหมายถูกหน้ารายการในเมนูตั้งค่า (กว้างเท่ากันทุกแถว) */
+const checkSlotStyle: React.CSSProperties = { display: 'inline-flex', width: '16px', marginRight: '6px' };
 import { useSheetStore } from './store';
 import { NumFmt } from '../core/model';
 
@@ -156,10 +160,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     >
       {/* File group */}
       <button onClick={onNew} title={th.toolbar.newFileTooltip}>
-        📄 {th.toolbar.newFile}
+        {th.toolbar.newFile}
       </button>
       <button onClick={onOpen} title={th.toolbar.openFileTooltip}>
-        📂 {th.toolbar.openFile}
+        {th.toolbar.openFile}
       </button>
 
       {/* Recent Files Dropdown */}
@@ -172,7 +176,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
           title={th.toolbar.recentFiles}
         >
-          🕒 {th.toolbar.recentFiles} ▾
+          {th.toolbar.recentFiles} <IconChevronDown />
         </button>
         {recentMenuOpen && (
           <div
@@ -215,7 +219,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
                     <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--fg-main)' }}>
-                      📄 {baseName}
+                      {baseName}
                     </div>
                     <div
                       style={{
@@ -237,7 +241,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       <button className="primary" onClick={onSave} title={th.toolbar.saveFileTooltip}>
-        💾 {th.toolbar.saveFile}
+        {th.toolbar.saveFile}
       </button>
       <button onClick={onSaveAs} title={th.toolbar.saveAsFileTooltip}>
         {th.toolbar.saveAsFile}
@@ -253,7 +257,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
           title={th.csv.menuTooltip}
         >
-          {th.csv.menu} ▾
+          {th.csv.menu} <IconChevronDown />
         </button>
         {fileMenuOpen && (
           <div style={dropdownStyle}>
@@ -278,10 +282,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* History group */}
       <button onClick={undo} disabled={!history.canUndo()} title={th.toolbar.undoTooltip}>
-        ↶ {th.toolbar.undo}
+        {th.toolbar.undo}
       </button>
       <button onClick={redo} disabled={!history.canRedo()} title={th.toolbar.redoTooltip}>
-        ↷ {th.toolbar.redo}
+        {th.toolbar.redo}
       </button>
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
@@ -404,7 +408,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           title={th.toolbar.fillColor}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '34px', padding: '2px 6px' }}
         >
-          <span style={{ fontSize: '13px' }}>🎨</span>
+          <IconFillColor size={18} />
           <span
             style={{
               width: '18px',
@@ -486,21 +490,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         onClick={() => setAlignment('left')}
         title={th.toolbar.alignLeft}
       >
-        ≡⇤
+        <IconAlignLeft />
       </button>
       <button
         style={{ ...activeBtnStyle(activeStyle.align === 'center'), width: '32px' }}
         onClick={() => setAlignment('center')}
         title={th.toolbar.alignCenter}
       >
-        ≡
+        <IconAlignCenter />
       </button>
       <button
         style={{ ...activeBtnStyle(activeStyle.align === 'right'), width: '32px' }}
         onClick={() => setAlignment('right')}
         title={th.toolbar.alignRight}
       >
-        ⇥≡
+        <IconAlignRight />
       </button>
 
       {/* Text wrap toggle */}
@@ -509,7 +513,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         onClick={toggleWrap}
         title={th.toolbar.wrapText}
       >
-        ↵ {th.toolbar.wrapText}
+        {th.toolbar.wrapText}
       </button>
 
       {/* Border menu */}
@@ -523,7 +527,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           title={th.toolbar.borders}
           style={activeBtnStyle(activeStyle.border && activeStyle.border !== 'none')}
         >
-          田 {th.toolbar.borders} ▾
+          {th.toolbar.borders} <IconChevronDown />
         </button>
 
         {borderMenuOpen && (
@@ -557,7 +561,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setBorderMenuOpen(false);
               }}
             >
-              ◻ {th.toolbar.borderNone}
+              {th.toolbar.borderNone}
             </button>
             <button
               style={{
@@ -572,7 +576,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setBorderMenuOpen(false);
               }}
             >
-              田 {th.toolbar.borderAll}
+              {th.toolbar.borderAll}
             </button>
             <button
               style={{
@@ -587,7 +591,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setBorderMenuOpen(false);
               }}
             >
-              回 {th.toolbar.borderOuter}
+              {th.toolbar.borderOuter}
             </button>
           </div>
         )}
@@ -597,10 +601,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Merge group */}
       <button onClick={() => mergeCells()} title={th.toolbar.mergeCellsTooltip}>
-        ⊞ {th.toolbar.mergeCells}
+        {th.toolbar.mergeCells}
       </button>
       <button onClick={() => unmergeCells()} title={th.toolbar.unmergeCellsTooltip}>
-        ⊟ {th.toolbar.unmergeCells}
+        {th.toolbar.unmergeCells}
       </button>
 
       <span style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 4px' }} />
@@ -618,10 +622,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <option value="date">{th.toolbar.fmtDate}</option>
       </select>
 
-      <button onClick={() => setNumFmt('baht')} title="จัดรูปแบบ ฿ บาท">
+      <button onClick={() => setNumFmt('baht')} title={th.toolbar.bahtTooltip}>
         ฿
       </button>
-      <button onClick={() => setNumFmt('percent')} title="จัดรูปแบบ %">
+      <button onClick={() => setNumFmt('percent')} title={th.toolbar.percentTooltip}>
         %
       </button>
 
@@ -635,9 +639,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             closeAllMenus();
             setRowColMenuOpen(next);
           }}
-          title="จัดการแถวและคอลัมน์"
+          title={th.toolbar.rowColTooltip}
         >
-          ☵ แถว/คอลัมน์ ▾
+          {th.toolbar.rowCol} <IconChevronDown />
         </button>
         {rowColMenuOpen && (
           <div
@@ -664,7 +668,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              ＋ แทรกแถวด้านบน
+              {th.toolbar.insertRowAbove}
             </button>
             <button
               style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px' }}
@@ -673,7 +677,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              ＋ แทรกแถวด้านล่าง
+              {th.toolbar.insertRowBelow}
             </button>
             <button
               style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px', color: 'var(--color-danger)' }}
@@ -682,7 +686,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              🗑️ ลบแถวปัจจุบัน
+              {th.toolbar.deleteRow}
             </button>
             <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
             <button
@@ -692,7 +696,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              ＋ แทรกคอลัมน์ทางซ้าย
+              {th.toolbar.insertColLeft}
             </button>
             <button
               style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px' }}
@@ -701,7 +705,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              ＋ แทรกคอลัมน์ทางขวา
+              {th.toolbar.insertColRight}
             </button>
             <button
               style={{ border: 'none', background: 'transparent', justifyContent: 'flex-start', padding: '6px 12px', color: 'var(--color-danger)' }}
@@ -710,7 +714,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              🗑️ ลบคอลัมน์ปัจจุบัน
+              {th.toolbar.deleteCol}
             </button>
             <span style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
             <button
@@ -720,7 +724,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setRowColMenuOpen(false);
               }}
             >
-              ＋ เพิ่ม 50 แถวล่างสุด
+              {th.toolbar.addRowsBottom}
             </button>
           </div>
         )}
@@ -751,7 +755,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
           title={th.sort.menuTooltip}
         >
-          ⇅ {th.sort.menu} ▾
+          {th.sort.menu} <IconChevronDown />
         </button>
         {sortMenuOpen && (
           <div style={dropdownStyle}>
@@ -780,7 +784,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           title={th.toolbar.sigmaTooltip}
           style={{ fontWeight: 600 }}
         >
-          Σ {th.toolbar.sigma} ▾
+          {th.toolbar.sigma} <IconChevronDown />
         </button>
         {sigmaMenuOpen && (
           <div
@@ -851,7 +855,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 setSigmaMenuOpen(false);
               }}
             >
-              ƒx {th.toolbar.otherFunctions}
+              {th.toolbar.otherFunctions}
             </button>
           </div>
         )}
@@ -868,7 +872,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
             title={th.settings.menuTooltip}
           >
-            ⚙ {th.settings.menu} ▾
+            {th.settings.menu} <IconChevronDown />
           </button>
           {settingsMenuOpen && (
             <div style={{ ...dropdownStyle, left: 'auto', right: 0 }} role="menu">
@@ -886,7 +890,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     setYearMode(mode);
                   }}
                 >
-                  {yearMode === mode ? '✓ ' : ' '}
+                  <span style={checkSlotStyle}>{yearMode === mode && <IconCheck />}</span>
                   {mode === 'ce' ? th.settings.yearCE : th.settings.yearBE}
                 </button>
               ))}
@@ -905,7 +909,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     setThemePref(pref);
                   }}
                 >
-                  {themePref === pref ? '✓ ' : ' '}
+                  <span style={checkSlotStyle}>{themePref === pref && <IconCheck />}</span>
                   {pref === 'system' ? th.settings.themeSystem : pref === 'light' ? th.settings.themeLight : th.settings.themeDark}
                 </button>
               ))}
@@ -924,7 +928,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     setGridWhite(white);
                   }}
                 >
-                  {gridWhite === white ? '✓ ' : ' '}
+                  <span style={checkSlotStyle}>{gridWhite === white && <IconCheck />}</span>
                   {white ? th.settings.gridAlwaysWhite : th.settings.gridFollowTheme}
                 </button>
               ))}
@@ -932,7 +936,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
         </div>
         <button onClick={onOpenHelp} title={th.toolbar.helpTooltip}>
-          ❓ {th.toolbar.help}
+          {th.toolbar.help}
         </button>
       </div>
     </div>

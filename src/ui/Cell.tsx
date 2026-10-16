@@ -2,6 +2,8 @@ import React from 'react';
 import { CellStyle, CellError } from '../core/model';
 import { ERROR_TOOLTIP_MAP } from '../core/numfmt';
 import { defaultTextColorOnFill } from '../core/theme';
+import { th } from '../i18n/th';
+import { IconChevronDown, IconFilter } from './icons';
 
 interface CellProps {
   r: number;
@@ -56,7 +58,7 @@ export const Cell: React.FC<CellProps> = ({
 
   let tooltip = isError ? ERROR_TOOLTIP_MAP[computedValue as CellError] : undefined;
   if (isUnsupportedFormula) {
-    tooltip = 'ฟังก์ชันนี้แอปยังไม่รองรับ แสดงค่าเดิมจากไฟล์';
+    tooltip = th.errors.unsupportedFormulaTooltip;
   }
 
   let textAlign = style?.align;
@@ -132,20 +134,20 @@ export const Cell: React.FC<CellProps> = ({
       }}
     >
       {isUnsupportedFormula && (
+        // สามเหลี่ยมเล็กที่มุมขวาบนของเซล (สีเตือนเดิม --grid-unsupported)
         <span
+          aria-hidden="true"
           style={{
             position: 'absolute',
-            top: '2px',
-            right: '2px',
-            fontSize: '10px',
-            lineHeight: 1,
-            color: 'var(--grid-unsupported)',
+            top: 0,
+            right: 0,
+            width: 0,
+            height: 0,
+            borderTop: '7px solid var(--grid-unsupported)',
+            borderLeft: '7px solid transparent',
             pointerEvents: 'none',
           }}
-          title={tooltip}
-        >
-          ⚠️
-        </span>
+        />
       )}
       {displayValue}
       {filterButton && (
@@ -179,7 +181,7 @@ export const Cell: React.FC<CellProps> = ({
             zIndex: 3,
           }}
         >
-          {filterButton.active ? '▼' : '▾'}
+          {filterButton.active ? <IconFilter size={12} /> : <IconChevronDown size={12} />}
         </button>
       )}
     </td>

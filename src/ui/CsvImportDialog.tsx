@@ -45,7 +45,7 @@ export const CsvImportDialog: React.FC = () => {
     return (
       <div style={overlay}>
         <div role="alertdialog" style={panelStyle}>
-          <h3 style={{ margin: 0, fontSize: '16px' }}>⚠️ {th.csv.importTitle}</h3>
+          <h3 style={{ margin: 0, fontSize: '16px' }}>{th.csv.importTitle}</h3>
           <p style={{ margin: 0 }}>
             {th.csv.limitWarning
               .replace('{rows}', parsed.size.rows.toLocaleString('th-TH'))

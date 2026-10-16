@@ -17,35 +17,12 @@ export const WelcomeGuideModal: React.FC<WelcomeGuideModalProps> = ({
 
   if (!isOpen) return null;
 
+  const g = th.welcomeGuide;
   const STEPS = [
-    {
-      icon: '🧮',
-      title: th.welcomeGuide.step1Title,
-      desc: th.welcomeGuide.step1Desc,
-      tip: '💡 พิมพ์ "ร10" ใต้เซล A10 จะแปลงเป็น =SUM(A1:A10) ให้โดยอัตโนมัติ!',
-      badge: 'สูตรและตัวช่วยพิมพ์',
-    },
-    {
-      icon: '🎯',
-      title: th.welcomeGuide.step2Title,
-      desc: th.welcomeGuide.step2Desc,
-      tip: '💡 กดปุ่ม F4 ซ้ำๆ เพื่อสลับตรึงเซล A1 ➔ $A$1 ➔ A$1 ➔ $A1',
-      badge: 'Point Mode & F4',
-    },
-    {
-      icon: '➕',
-      title: th.welcomeGuide.step3Title,
-      desc: th.welcomeGuide.step3Desc,
-      tip: '💡 ดับเบิลคลิกจุดมุมล่างขวาเพื่อเติมสูตรลงด้านล่างจนสุดตารางทันที หรือใช้ Ctrl+D',
-      badge: 'Fill Handle',
-    },
-    {
-      icon: '📊',
-      title: th.welcomeGuide.step4Title,
-      desc: th.welcomeGuide.step4Desc,
-      tip: '💡 ไฟล์ .xlsx ที่บันทึกจาก SheetEasy เข้ากันได้กับ Google Sheets และ Excel 100%',
-      badge: 'ความเข้ากันได้ 100%',
-    },
+    { title: g.step1Title, desc: g.step1Desc, tip: g.step1Tip, badge: g.step1Badge },
+    { title: g.step2Title, desc: g.step2Desc, tip: g.step2Tip, badge: g.step2Badge },
+    { title: g.step3Title, desc: g.step3Desc, tip: g.step3Tip, badge: g.step3Badge },
+    { title: g.step4Title, desc: g.step4Desc, tip: g.step4Tip, badge: g.step4Badge },
   ];
 
   const currentStepData = STEPS[step];
@@ -97,7 +74,7 @@ export const WelcomeGuideModal: React.FC<WelcomeGuideModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--color-primary)' }}>
-              🚀 {th.welcomeGuide.title}
+              {th.welcomeGuide.title}
             </h2>
             <div style={{ fontSize: '12px', color: 'var(--fg-muted)', marginTop: '2px' }}>
               {th.welcomeGuide.subtitle} ({step + 1}/{STEPS.length})
@@ -114,7 +91,7 @@ export const WelcomeGuideModal: React.FC<WelcomeGuideModalProps> = ({
               padding: '4px 8px',
             }}
           >
-            {th.welcomeGuide.skip} ✕
+            {th.welcomeGuide.skip}
           </button>
         </div>
 
@@ -134,7 +111,6 @@ export const WelcomeGuideModal: React.FC<WelcomeGuideModalProps> = ({
             justifyContent: 'center',
           }}
         >
-          <div style={{ fontSize: '42px', lineHeight: 1 }}>{currentStepData.icon}</div>
           <div
             style={{
               fontSize: '11px',

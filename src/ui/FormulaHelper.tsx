@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { th } from '../i18n/th';
+import { IconClose } from './icons';
 import { useSheetStore } from './store';
 
 export interface FunctionItem {
@@ -370,7 +371,6 @@ export const FormulaHelper: React.FC = () => {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>ƒx</span>
             <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>{th.formulaHelper.title}</h3>
           </div>
           <button
@@ -383,8 +383,10 @@ export const FormulaHelper: React.FC = () => {
               color: 'var(--fg-muted)',
               padding: '2px 6px',
             }}
+            aria-label={th.dialog.close}
+            title={th.dialog.close}
           >
-            ✕
+            <IconClose />
           </button>
         </div>
 
@@ -555,7 +557,7 @@ export const FormulaHelper: React.FC = () => {
                   onClick={() => insertFormulaFunction(currentFn.name)}
                   style={{ padding: '8px 18px', fontSize: '13.5px', fontWeight: 600 }}
                 >
-                  ✓ {th.formulaHelper.useFormula}
+                  {th.formulaHelper.useFormula}
                 </button>
               </div>
             </div>

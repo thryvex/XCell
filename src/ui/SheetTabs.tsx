@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSheetStore } from './store';
 import { th } from '../i18n/th';
+import { IconPlus } from './icons';
 import { ConfirmDialog } from './Dialogs';
 import { adjacentVisibleSheet, visibleSheetIndices } from '../core/workbookOps';
 
@@ -145,7 +146,7 @@ export const SheetTabs: React.FC = () => {
         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--hover-tint)')}
         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
       >
-        ＋
+        <IconPlus />
       </button>
 
       <div style={{ width: '1px', height: '18px', backgroundColor: 'var(--border-color)', margin: '0 4px', flexShrink: 0 }} />
@@ -257,7 +258,7 @@ export const SheetTabs: React.FC = () => {
             paddingRight: '8px',
           }}
         >
-          ⚠ {renameError}
+          {renameError}
         </span>
       )}
 
@@ -285,7 +286,7 @@ export const SheetTabs: React.FC = () => {
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--menu-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            ✏️ {th.sheetTabs.rename}
+            {th.sheetTabs.rename}
           </div>
           <div
             onClick={() => {
@@ -296,7 +297,7 @@ export const SheetTabs: React.FC = () => {
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--menu-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            📋 {th.sheetTabs.duplicate}
+            {th.sheetTabs.duplicate}
           </div>
           <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
           <div
@@ -316,7 +317,7 @@ export const SheetTabs: React.FC = () => {
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            ◀ {th.sheetTabs.moveLeft}
+            {th.sheetTabs.moveLeft}
           </div>
           <div
             onClick={() => {
@@ -336,7 +337,7 @@ export const SheetTabs: React.FC = () => {
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            ▶ {th.sheetTabs.moveRight}
+            {th.sheetTabs.moveRight}
           </div>
           <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
           <div
@@ -356,7 +357,7 @@ export const SheetTabs: React.FC = () => {
             }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            🗑️ {th.sheetTabs.delete}
+            {th.sheetTabs.delete}
           </div>
         </div>
       )}

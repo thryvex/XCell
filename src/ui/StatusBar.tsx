@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { th } from '../i18n/th';
+import { IconMinus, IconPlus } from './icons';
 import { useSheetStore, ZOOM_MIN, ZOOM_MAX } from './store';
 import { cellToA1 } from '../core/address';
 import { formatNumberWithCommas, formatDate } from '../core/numfmt';
@@ -108,13 +109,13 @@ export const StatusBar: React.FC = () => {
         {/* ซูม 50%–200% (4C) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
           <button style={zoomButton} onClick={zoomOut} title={th.zoom.zoomOut} disabled={zoom <= ZOOM_MIN}>
-            −
+            <IconMinus size={16} />
           </button>
           <button style={{ ...zoomButton, minWidth: '46px' }} onClick={resetZoom} title={th.zoom.reset}>
             {th.zoom.percent.replace('{percent}', String(zoom))}
           </button>
           <button style={zoomButton} onClick={zoomIn} title={th.zoom.zoomIn} disabled={zoom >= ZOOM_MAX}>
-            +
+            <IconPlus size={16} />
           </button>
         </div>
         {isDirty ? (

@@ -65,7 +65,7 @@ export const SortDialog: React.FC = () => {
     return (
       <div style={overlay}>
         <div style={panel} role="alertdialog">
-          <h3 style={{ margin: 0, fontSize: '16px' }}>⚠️ {th.sort.dialogTitle}</h3>
+          <h3 style={{ margin: 0, fontSize: '16px' }}>{th.sort.dialogTitle}</h3>
           <p style={{ margin: 0 }}>{th.sort.formulaWarning}</p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button onClick={cancelSort}>{th.dialog.cancel}</button>

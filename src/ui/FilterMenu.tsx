@@ -247,7 +247,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ col, x, y, onClose }) =>
               reapplyFilter();
             }}
           >
-            ↻ {th.filter.reapply}
+            {th.filter.reapply}
           </button>
           {existing && (
             <button
