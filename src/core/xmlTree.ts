@@ -21,9 +21,19 @@ export const XML_NS = {
   pkgRels: 'http://schemas.openxmlformats.org/package/2006/relationships',
 };
 
-/** แปลง XML เป็นต้นไม้ (โยน error ถ้า XML ไม่ถูกรูปแบบ) */
+/** ขนาด XML สูงสุดที่ยอมอ่าน (ตัวอักษร) — กันไฟล์ที่ทำให้หน่วยความจำล้น */
+export const MAX_XML_LENGTH = 5_000_000;
+
+/**
+ * แปลง XML เป็นต้นไม้ (โยน error ถ้า XML ไม่ถูกรูปแบบ, ยาวเกิน MAX_XML_LENGTH หรือมี DOCTYPE)
+ * ไม่รับ DOCTYPE จึงไม่มีการประกาศ entity เอง; saxes ไม่โหลดอะไรจากภายนอก และ entity ที่ไม่รู้จักเป็น error
+ */
 export function parseXml(xml: string): XmlNode {
+  if (xml.length > MAX_XML_LENGTH) throw new Error('XML ใหญ่เกินไป');
   const parser = new SaxesParser({ xmlns: true });
+  parser.on('doctype', () => {
+    throw new Error('ไม่รับ XML ที่มี DOCTYPE');
+  });
   const root: XmlNode = { local: '#root', uri: '', attrs: {}, nsAttrs: {}, children: [], text: '' };
   const stack: XmlNode[] = [root];
   parser.on('opentag', (tag) => {

@@ -48,21 +48,40 @@ export type Sheet = {
   filter?: SheetFilter; // ตัวกรอง (4C)
   hiddenRows?: number[]; // แถวที่ซ่อนจากตัวกรอง (0-based, เรียงจากน้อยไปมาก)
   zoom?: number; // ระดับซูมเป็นเปอร์เซ็นต์ (ไม่มี = 100)
-  charts?: SheetChart[]; // กราฟบนชีตนี้ (5D) อ้างช่วงข้อมูลในชีตเดียวกัน
+  charts?: SheetChart[]; // กราฟบนชีตนี้ (5D) อ้างช่วงในชีตใดก็ได้
 };
 
 export type ChartType = 'bar' | 'line' | 'pie';
+export type ChartLegend = 'bottom' | 'right' | 'none';
+
+/**
+ * ชุดข้อมูลของกราฟ (5D) — reference เขียนแบบสูตรโดยไม่มี "=" และระบุชื่อชีตเสมอ
+ * เช่น "'ข้อมูล'!B2:B5"; reference ที่หายแล้วเป็น "#REF!"
+ */
+export type ChartSeries = {
+  /** ชื่อชุด: อ้างเซลเดียว หรือเป็นข้อความ (ข้อความว่าง = "ชุดข้อมูล N") */
+  name: { ref: string } | { text: string };
+  /** ช่วงป้ายชื่อ (ไม่มี = 1, 2, 3, …) */
+  categories?: string;
+  /** ช่วงค่า (แถวเดียวหรือคอลัมน์เดียว) */
+  values: string;
+  /** สี #RRGGBB */
+  color: string;
+};
 
 /** กราฟลอยบนชีต (5D): ยึดมุมบนซ้ายกับเซล + ระยะเลื่อน, ขนาดเป็น px (ที่ซูม 100%) */
 export type SheetChart = {
   id: string;
   type: ChartType;
   title: string;
-  /** ช่วงข้อมูล 0-based; null = ช่วงถูกลบหมดแล้ว (แสดง "ไม่มีข้อมูล") */
-  range: { r1: number; c1: number; r2: number; c2: number } | null;
+  series: ChartSeries[];
   anchor: { row: number; col: number; dx: number; dy: number };
   width: number;
   height: number;
+  legend: ChartLegend;
+  xTitle: string;
+  yTitle: string;
+  dataLabels: boolean;
 };
 
 /** เงื่อนไขกรองแบบ "กรองตามเงื่อนไข" */

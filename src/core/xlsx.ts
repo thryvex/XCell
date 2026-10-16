@@ -16,11 +16,13 @@ import {
 import { MARGINS_MM } from './paginate';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseA1 } from './address';
-import { dateToSerial, THAI_TO_ERROR_MAP, formatDisplayValue } from './numfmt';
+import { dateToSerial, THAI_TO_ERROR_MAP } from './numfmt';
 import { isCellError, FUNCTIONS } from './functions';
 import { tokenize } from './tokenizer';
 import { normalizeSheetRefsInFormula } from './refshift';
-import { getChartData } from './chart';
+import { workbookChartContext } from './chart';
+import { th } from '../i18n/th';
+import { pxToXlsxColWidth, xlsxColWidthToPx, pxToXlsxRowHeight, xlsxRowHeightToPx } from './sizeUnits';
 import { injectChartsIntoXlsx, readChartsFromXlsx } from './chartXlsx';
 
 const NUM_FMT_EXCEL: Record<string, string> = {
@@ -91,7 +93,7 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
       const colIdx = parseInt(colIdxStr, 10);
       const col = ws.getColumn(colIdx + 1);
       // Rough conversion: 1 Excel width unit ~ 7.5 - 8 px
-      col.width = Math.max(8, Math.round(widthPx / 8));
+      col.width = pxToXlsxColWidth(widthPx);
     }
 
     // Apply row heights
@@ -99,7 +101,7 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
       const rowIdx = parseInt(rowIdxStr, 10);
       const row = ws.getRow(rowIdx + 1);
       // 1 pt ~ 1.33 px
-      row.height = Math.round(heightPx * 0.75);
+      row.height = pxToXlsxRowHeight(heightPx);
     }
 
     // Apply cells
@@ -322,12 +324,12 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
     // Column widths / row heights (กลับด้านกับตอนเขียน: width × 8 px, height pt ÷ 0.75)
     ws.columns?.forEach((col, idx) => {
       if (col && typeof col.width === 'number' && (col as any).isCustomWidth !== false) {
-        sheet.colWidths[idx] = Math.round(col.width * 8);
+        sheet.colWidths[idx] = xlsxColWidthToPx(col.width);
       }
     });
     ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
       if (typeof row.height === 'number' && row.height > 0) {
-        sheet.rowHeights[rowNumber - 1] = Math.round(row.height / 0.75);
+        sheet.rowHeights[rowNumber - 1] = xlsxRowHeightToPx(row.height);
       }
     });
 
@@ -477,16 +479,7 @@ export async function exportToXlsxBuffer(wb: Workbook): Promise<Uint8Array> {
   const bytes = new Uint8Array(buffer);
   if (!wb.sheets.some((s) => s.charts && s.charts.length > 0)) return bytes;
   // กราฟ (5D): แทรกลง zip หลัง ExcelJS เขียนแล้ว พร้อมค่า cache จากค่าที่คำนวณได้
-  const evaluator = new Evaluator(wb);
-  return injectChartsIntoXlsx(bytes, wb.sheets, (sheetIndex, chart) => {
-    const sheet = wb.sheets[sheetIndex];
-    const value = (key: string) => evaluator.getCellValue(key, sheetIndex);
-    const label = (key: string) => {
-      const v = value(key);
-      return v === undefined || v === '' ? '' : formatDisplayValue(v, sheet.cells[key]?.fmt);
-    };
-    return getChartData(chart.range, value, label);
-  });
+  return injectChartsIntoXlsx(bytes, wb.sheets, workbookChartContext(wb, new Evaluator(wb), true));
 }
 
 /**
@@ -504,8 +497,7 @@ export async function importFromXlsxBuffer(data: Uint8Array): Promise<Workbook> 
     if (list.length > 0) wb.sheets[i].charts = list;
   });
   const features = new Set(wb.unsupportedFeatures ?? []);
-  if (charts.unsupported) features.add('แผนภูมิ/กราฟ');
-  if (charts.formatting) features.add('การจัดรูปแบบกราฟ');
+  if (charts.unsupported) features.add(th.chart.unsupportedInFile);
   wb.unsupportedFeatures = features.size > 0 ? Array.from(features) : undefined;
   return wb;
 }

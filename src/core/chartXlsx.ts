@@ -1,14 +1,32 @@
 /**
  * กราฟใน .xlsx (5D): ExcelJS 4.4 เขียนกราฟไม่ได้และทิ้งกราฟตอนอ่าน
  * จึงแทรกส่วนกราฟลง zip เองหลัง ExcelJS เขียนไฟล์ และอ่านกราฟจาก zip เองตอนเปิด
- * (ผลทดลองใน scripts/chart-spike/ — Google Sheets แสดงกราฟแท่ง/เส้น/วงกลมได้)
+ * (วิธีเดียวกับ spike ใน scripts/chart-spike/)
  */
 import JSZip from 'jszip';
-import type { Sheet, SheetChart, ChartType } from './model';
-import { ChartData, chartToTwoCellAnchor, twoCellAnchorToChart, CellAnchorEmu, EMU_PER_PX, MIN_CHART_WIDTH, MIN_CHART_HEIGHT, pxToAnchor, newChartId } from './chart';
-import { colToStr, parseA1, parseRange } from './address';
-import { sameSheetName } from './sheetName';
-import { XmlNode, XML_NS, parseXml, child, childrenOf, descendants, textOf, escapeXml } from './xmlTree';
+import type { Sheet, SheetChart, ChartSeries, ChartType, ChartLegend } from './model';
+import {
+  ChartContext,
+  CellAnchorEmu,
+  EMU_PER_PX,
+  MIN_CHART_WIDTH,
+  MIN_CHART_HEIGHT,
+  chartToTwoCellAnchor,
+  twoCellAnchorToChart,
+  pxToAnchor,
+  newChartId,
+  parseChartRef,
+  makeChartRef,
+  refCells,
+  pointValue,
+  seriesName,
+  paletteColor,
+  ParsedChartRef,
+  MAX_CHART_SERIES,
+} from './chart';
+import { cellToA1, colToStr } from './address';
+import { storedColWidthPx, storedRowHeightPx } from './sizeUnits';
+import { XmlNode, XML_NS, parseXml, child, childrenOf, descendants, textOf, escapeXml, MAX_XML_LENGTH } from './xmlTree';
 
 const REL_TYPE = {
   drawing: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing',
@@ -56,7 +74,7 @@ async function readRels(zip: JSZip, partPath: string): Promise<Rel[]> {
   return childrenOf(parseXml(xml), XML_NS.pkgRels, 'Relationship').map((r) => ({
     id: r.attrs.Id,
     type: r.attrs.Type,
-    target: resolveTarget(partPath, r.attrs.Target),
+    target: r.attrs.TargetMode === 'External' ? r.attrs.Target : resolveTarget(partPath, r.attrs.Target),
   }));
 }
 
@@ -69,7 +87,7 @@ function relsXml(rels: Array<{ id: string; type: string; target: string }>): str
   );
 }
 
-/** ชื่อชีต → path ของไฟล์ชีต (ตาม xl/workbook.xml) และรายการ chartsheet */
+/** ชื่อชีต → path ของไฟล์ชีต (ตาม xl/workbook.xml) และจำนวน chartsheet */
 async function sheetParts(zip: JSZip): Promise<{ byName: Array<{ name: string; path: string }>; chartsheets: number }> {
   const wbXml = await readText(zip, 'xl/workbook.xml');
   if (!wbXml) return { byName: [], chartsheets: 0 };
@@ -90,12 +108,12 @@ async function sheetParts(zip: JSZip): Promise<{ byName: Array<{ name: string; p
 // เขียน
 // ---------------------------------------------------------------------------
 
-/** อ้างช่วงในสูตรของกราฟ: ใส่ '...' รอบชื่อชีตเสมอ (SPEC 5.18) */
-export function chartRef(sheetName: string, c1: number, r1: number, c2?: number, r2?: number): string {
-  const sheet = `'${sheetName.replace(/'/g, "''")}'`;
-  const a = `$${colToStr(c1)}$${r1 + 1}`;
-  if (c2 === undefined || r2 === undefined || (c1 === c2 && r1 === r2)) return `${sheet}!${a}`;
-  return `${sheet}!${a}:$${colToStr(c2)}$${r2 + 1}`;
+/** reference ใน chart XML: ใส่ '...' รอบชื่อชีตเสมอ และใช้ $ (SPEC 5.18) */
+export function xlsxChartRef(r: ParsedChartRef): string {
+  const sheet = `'${r.sheet.replace(/'/g, "''")}'`;
+  const a = `$${colToStr(r.c1)}$${r.r1 + 1}`;
+  if (r.r1 === r.r2 && r.c1 === r.c2) return `${sheet}!${a}`;
+  return `${sheet}!${a}:$${colToStr(r.c2)}$${r.r2 + 1}`;
 }
 
 function strCache(values: string[]): string {
@@ -114,61 +132,127 @@ function numCache(values: (number | null)[]): string {
   );
 }
 
+function hex(color: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(color.trim());
+  return (m ? m[1] : paletteColor(0).slice(1)).toUpperCase();
+}
+
+const solid = (color: string) => `<a:solidFill><a:srgbClr val="${hex(color)}"/></a:solidFill>`;
+
+const DATA_LABELS =
+  '<c:dLbls><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>';
+
+function richText(text: string, vertical = false): string {
+  const bodyPr = vertical ? '<a:bodyPr rot="-5400000" vert="horz"/>' : '<a:bodyPr/>';
+  return `<c:tx><c:rich>${bodyPr}<a:lstStyle/><a:p><a:r><a:t>${escapeXml(text)}</a:t></a:r></a:p></c:rich></c:tx>`;
+}
+
+function titleXml(text: string, vertical = false): string {
+  return text.trim() ? `<c:title>${richText(text, vertical)}<c:overlay val="0"/></c:title>` : '';
+}
+
 const AX_CAT = 500000001;
 const AX_VAL = 500000002;
 
-const AXES_XML =
-  `<c:catAx><c:axId val="${AX_CAT}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
-  `<c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/>` +
-  `<c:tickLblPos val="nextTo"/><c:crossAx val="${AX_VAL}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
-  `<c:valAx><c:axId val="${AX_VAL}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
-  `<c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/>` +
-  `<c:tickLblPos val="nextTo"/><c:crossAx val="${AX_CAT}"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`;
+function axesXml(chart: SheetChart): string {
+  return (
+    `<c:catAx><c:axId val="${AX_CAT}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
+    `<c:axPos val="b"/>${titleXml(chart.xTitle)}<c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/>` +
+    `<c:tickLblPos val="nextTo"/><c:crossAx val="${AX_VAL}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
+    `<c:valAx><c:axId val="${AX_VAL}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
+    `<c:axPos val="l"/><c:majorGridlines/>${titleXml(chart.yTitle, true)}<c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/>` +
+    `<c:tickLblPos val="nextTo"/><c:crossAx val="${AX_CAT}"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`
+  );
+}
+
+/** ข้อมูลของชุดหนึ่งสำหรับเขียนลงไฟล์ (ทุกเซลในช่วง ไม่ข้ามแถวที่ซ่อน — ไฟล์ใช้ plotVisOnly เอง) */
+interface SeriesForFile {
+  series: ChartSeries;
+  index: number;
+  name: ParsedChartRef | null;
+  nameText: string;
+  categories: ParsedChartRef | null;
+  categoryLabels: string[];
+  values: ParsedChartRef;
+  numbers: (number | null)[];
+}
+
+function seriesForFile(chart: SheetChart, ctx: ChartContext): SeriesForFile[] {
+  const out: SeriesForFile[] = [];
+  chart.series.forEach((series, index) => {
+    const values = parseChartRef(series.values);
+    const vSheet = values ? ctx.sheetIndexOf(values.sheet) : -1;
+    if (!values || vSheet < 0) return; // reference หายแล้ว: ไม่เขียนชุดนี้
+    const categories = series.categories ? parseChartRef(series.categories) : null;
+    const cSheet = categories ? ctx.sheetIndexOf(categories.sheet) : -1;
+    const name = 'ref' in series.name ? parseChartRef(series.name.ref) : null;
+    out.push({
+      series,
+      index,
+      name: name && ctx.sheetIndexOf(name.sheet) >= 0 ? name : null,
+      nameText: seriesName(series, index, ctx),
+      categories: categories && cSheet >= 0 ? categories : null,
+      categoryLabels: categories && cSheet >= 0 ? refCells(categories).map((c) => ctx.label(cSheet, cellToA1(c.r, c.c))) : [],
+      values,
+      numbers: refCells(values).map((c) => pointValue(ctx.value(vSheet, cellToA1(c.r, c.c))).value),
+    });
+  });
+  return chart.type === 'pie' ? out.slice(0, 1) : out;
+}
 
 /**
- * XML ของกราฟหนึ่งกราฟ — ไม่เขียนสี/สไตล์ (spPr, txPr ฯลฯ) ให้โปรแกรมที่เปิดใช้ค่าเริ่มต้นของตัวเอง
- * data ต้องมาจาก chart.range (ไม่ข้ามแถวที่ซ่อน — ตัวกรองไม่ได้อยู่ในไฟล์)
+ * XML ของกราฟหนึ่งกราฟ หรือ null ถ้าไม่มีชุดข้อมูลที่ reference ยังอยู่
+ * สีชุดข้อมูลเขียนชัด (srgbClr) ไม่พึ่งธีมของ Office; ไม่เขียนฟอนต์/สไตล์อื่น
  */
-export function buildChartXml(sheetName: string, chart: SheetChart, data: ChartData): string {
-  const range = chart.range!;
-  const firstDataRow = data.hasHeader ? range.r1 + 1 : range.r1;
-  const series = chart.type === 'pie' ? data.series.slice(0, 1) : data.series;
+export function buildChartXml(chart: SheetChart, ctx: ChartContext): string | null {
+  const list = seriesForFile(chart, ctx);
+  if (list.length === 0) return null;
 
-  const serXml = series
+  const serXml = list
     .map((s, i) => {
-      const tx = data.hasHeader
-        ? `<c:tx><c:strRef><c:f>${escapeXml(chartRef(sheetName, s.col, range.r1))}</c:f>${strCache([s.name])}</c:strRef></c:tx>`
+      let tx = '';
+      if (s.name) tx = `<c:tx><c:strRef><c:f>${escapeXml(xlsxChartRef(s.name))}</c:f>${strCache([s.nameText])}</c:strRef></c:tx>`;
+      else if ('text' in s.series.name && s.series.name.text.trim()) tx = `<c:tx><c:v>${escapeXml(s.series.name.text)}</c:v></c:tx>`;
+      const cat = s.categories
+        ? `<c:cat><c:strRef><c:f>${escapeXml(xlsxChartRef(s.categories))}</c:f>${strCache(s.categoryLabels)}</c:strRef></c:cat>`
         : '';
-      const cat = data.hasCategoryColumn
-        ? `<c:cat><c:strRef><c:f>${escapeXml(chartRef(sheetName, range.c1, firstDataRow, range.c1, range.r2))}</c:f>${strCache(data.categories)}</c:strRef></c:cat>`
-        : '';
-      const val = `<c:val><c:numRef><c:f>${escapeXml(chartRef(sheetName, s.col, firstDataRow, s.col, range.r2))}</c:f>${numCache(s.values)}</c:numRef></c:val>`;
+      const val = `<c:val><c:numRef><c:f>${escapeXml(xlsxChartRef(s.values))}</c:f>${numCache(s.numbers)}</c:numRef></c:val>`;
       const head = `<c:idx val="${i}"/><c:order val="${i}"/>${tx}`;
-      if (chart.type === 'bar') return `<c:ser>${head}<c:invertIfNegative val="0"/>${cat}${val}</c:ser>`;
-      if (chart.type === 'line') return `<c:ser>${head}${cat}${val}<c:smooth val="0"/></c:ser>`;
-      return `<c:ser>${head}${cat}${val}</c:ser>`;
+      const labels = chart.dataLabels ? DATA_LABELS : '';
+      if (chart.type === 'bar') {
+        return `<c:ser>${head}<c:spPr>${solid(s.series.color)}</c:spPr><c:invertIfNegative val="0"/>${labels}${cat}${val}</c:ser>`;
+      }
+      if (chart.type === 'line') {
+        const ln = `<a:ln w="28575" cap="rnd">${solid(s.series.color)}<a:round/></a:ln>`;
+        const marker = `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solid(s.series.color)}<a:ln>${solid(s.series.color)}</a:ln></c:spPr></c:marker>`;
+        return `<c:ser>${head}<c:spPr>${ln}</c:spPr>${marker}${labels}${cat}${val}<c:smooth val="0"/></c:ser>`;
+      }
+      // วงกลม: สีแต่ละชิ้นจากจานสี
+      const dPts = s.numbers
+        .map((_, p) => `<c:dPt><c:idx val="${p}"/><c:bubble3D val="0"/><c:spPr>${solid(paletteColor(p))}</c:spPr></c:dPt>`)
+        .join('');
+      return `<c:ser>${head}${dPts}${labels}${cat}${val}</c:ser>`;
     })
     .join('');
 
   let plot: string;
   if (chart.type === 'bar') {
-    plot = `<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>${serXml}<c:gapWidth val="150"/><c:axId val="${AX_CAT}"/><c:axId val="${AX_VAL}"/></c:barChart>${AXES_XML}`;
+    plot = `<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>${serXml}<c:gapWidth val="150"/><c:axId val="${AX_CAT}"/><c:axId val="${AX_VAL}"/></c:barChart>${axesXml(chart)}`;
   } else if (chart.type === 'line') {
-    plot = `<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${serXml}<c:marker val="1"/><c:axId val="${AX_CAT}"/><c:axId val="${AX_VAL}"/></c:lineChart>${AXES_XML}`;
+    plot = `<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${serXml}<c:marker val="1"/><c:axId val="${AX_CAT}"/><c:axId val="${AX_VAL}"/></c:lineChart>${axesXml(chart)}`;
   } else {
     plot = `<c:pieChart><c:varyColors val="1"/>${serXml}<c:firstSliceAng val="0"/></c:pieChart>`;
   }
 
-  const title = chart.title.trim()
-    ? `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${escapeXml(chart.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>`
-    : '<c:autoTitleDeleted val="1"/>';
+  const title = chart.title.trim() ? `${titleXml(chart.title)}<c:autoTitleDeleted val="0"/>` : '<c:autoTitleDeleted val="1"/>';
+  const legend =
+    chart.legend === 'none' ? '' : `<c:legend><c:legendPos val="${chart.legend === 'right' ? 'r' : 'b'}"/><c:overlay val="0"/></c:legend>`;
 
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
     `<c:chartSpace xmlns:c="${XML_NS.c}" xmlns:a="${XML_NS.a}" xmlns:r="${XML_NS.r}">` +
     '<c:roundedCorners val="0"/>' +
-    `<c:chart>${title}<c:plotArea><c:layout/>${plot}</c:plotArea>` +
-    `<c:legend><c:legendPos val="${chart.type === 'pie' ? 'r' : 'b'}"/><c:overlay val="0"/></c:legend>` +
+    `<c:chart>${title}<c:plotArea><c:layout/>${plot}</c:plotArea>${legend}` +
     '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>' +
     '</c:chartSpace>'
   );
@@ -207,15 +291,14 @@ function nextRelId(rels: Rel[]): string {
 
 /**
  * แทรกกราฟทุกกราฟของสมุดงานลงไฟล์ .xlsx ที่ ExcelJS เขียนแล้ว
- * dataFor: ข้อมูลกราฟจากช่วง (ทุกแถว) — กราฟที่ช่วงถูกลบหมด (range = null) ไม่ถูกเขียน
+ * ctx: อ่านค่าปัจจุบันสำหรับค่า cache; กราฟที่ reference หายทุกชุดไม่ถูกเขียน
  */
-export async function injectChartsIntoXlsx(
-  bytes: Uint8Array,
-  sheets: Sheet[],
-  dataFor: (sheetIndex: number, chart: SheetChart) => ChartData
-): Promise<Uint8Array> {
+export async function injectChartsIntoXlsx(bytes: Uint8Array, sheets: Sheet[], ctx: ChartContext): Promise<Uint8Array> {
   const jobs = sheets
-    .map((sheet, sheetIndex) => ({ sheet, sheetIndex, charts: (sheet.charts ?? []).filter((c) => c.range) }))
+    .map((sheet) => ({
+      sheet,
+      charts: (sheet.charts ?? []).map((chart) => ({ chart, xml: buildChartXml(chart, ctx) })).filter((c) => c.xml !== null),
+    }))
     .filter((j) => j.charts.length > 0);
   if (jobs.length === 0) return bytes;
 
@@ -225,9 +308,19 @@ export async function injectChartsIntoXlsx(
   const addOverride = (part: string, type: string) => {
     if (!ct.includes(`PartName="/${part}"`)) ct = ct.replace('</Types>', `<Override PartName="/${part}" ContentType="${type}"/></Types>`);
   };
+  // ชื่อไฟล์ในแพ็กเกจไม่ชนกับที่มีอยู่
   let chartNo = 0;
+  const nextChartPath = () => {
+    do chartNo++;
+    while (zip.file(`xl/charts/chart${chartNo}.xml`));
+    return `xl/charts/chart${chartNo}.xml`;
+  };
   let drawingNo = 0;
-  while (zip.file(`xl/drawings/drawing${drawingNo + 1}.xml`)) drawingNo++;
+  const nextDrawingPath = () => {
+    do drawingNo++;
+    while (zip.file(`xl/drawings/drawing${drawingNo}.xml`));
+    return `xl/drawings/drawing${drawingNo}.xml`;
+  };
 
   for (const job of jobs) {
     const part = byName.find((p) => p.name === job.sheet.name);
@@ -235,20 +328,23 @@ export async function injectChartsIntoXlsx(
     let sheetXml = (await readText(zip, part.path))!;
     if (/<drawing\b/.test(sheetXml)) throw new Error(`ชีต "${job.sheet.name}" มี drawing อยู่แล้ว`);
 
-    drawingNo++;
-    const drawingPath = `xl/drawings/drawing${drawingNo}.xml`;
+    // ตำแหน่งในไฟล์คิดจากขนาดคอลัมน์/แถวตามที่ถูกเขียนลงไฟล์จริง (ปัดหน่วยแล้ว)
+    const storedSizes: Sheet = {
+      ...job.sheet,
+      colWidths: Object.fromEntries(Object.entries(job.sheet.colWidths).map(([k, v]) => [k, storedColWidthPx(v)])),
+      rowHeights: Object.fromEntries(Object.entries(job.sheet.rowHeights).map(([k, v]) => [k, storedRowHeightPx(v)])),
+    };
+    const drawingPath = nextDrawingPath();
     const drawingRels: Array<{ id: string; type: string; target: string }> = [];
     const anchors: string[] = [];
-    job.charts.forEach((chart, i) => {
-      chartNo++;
-      while (zip.file(`xl/charts/chart${chartNo}.xml`)) chartNo++;
-      const chartPath = `xl/charts/chart${chartNo}.xml`;
-      zip.file(chartPath, buildChartXml(job.sheet.name, chart, dataFor(job.sheetIndex, chart)));
+    job.charts.forEach(({ chart, xml }, i) => {
+      const chartPath = nextChartPath();
+      zip.file(chartPath, xml!);
       addOverride(chartPath, CONTENT_TYPE.chart);
       const relId = `rId${i + 1}`;
-      drawingRels.push({ id: relId, type: REL_TYPE.chart, target: `../charts/chart${chartNo}.xml` });
-      const { from, to } = chartToTwoCellAnchor(job.sheet, chart);
-      anchors.push(anchorXml(from, to, i + 2, relId, chart.title || `Chart ${chartNo}`));
+      drawingRels.push({ id: relId, type: REL_TYPE.chart, target: `../charts/${chartPath.split('/').pop()}` });
+      const { from, to } = chartToTwoCellAnchor(storedSizes, chart);
+      anchors.push(anchorXml(from, to, i + 2, relId, chart.title || `Chart ${i + 1}`));
     });
     zip.file(
       drawingPath,
@@ -258,10 +354,9 @@ export async function injectChartsIntoXlsx(
     zip.file(relsPathFor(drawingPath), relsXml(drawingRels));
     addOverride(drawingPath, CONTENT_TYPE.drawing);
 
-    // ชีต → drawing
-    // rels เดิมที่ ExcelJS เขียน (เช่น hyperlink ภายนอกที่มี TargetMode) ให้เติมต่อท้ายแทนการเขียนใหม่ทั้งไฟล์
+    // ชีต → drawing: rels เดิมที่ ExcelJS เขียน (เช่น hyperlink ภายนอก) ให้เติมต่อท้ายแทนการเขียนใหม่ทั้งไฟล์
     const drawingRelId = nextRelId(await readRels(zip, part.path));
-    const drawingTarget = `../drawings/drawing${drawingNo}.xml`;
+    const drawingTarget = `../drawings/${drawingPath.split('/').pop()}`;
     const relsPath = relsPathFor(part.path);
     const oldRels = await readText(zip, relsPath);
     zip.file(
@@ -284,99 +379,71 @@ export async function injectChartsIntoXlsx(
 // อ่าน
 // ---------------------------------------------------------------------------
 
-/** ส่วนของกราฟที่แอปไม่เก็บ ถ้าพบ = กราฟมี "การจัดรูปแบบ" ที่จะหายเมื่อบันทึก */
-const FORMATTING_ELEMENTS = new Set(['spPr', 'txPr', 'dLbls', 'dPt', 'trendline', 'errBars', 'userShapes', 'style', 'pictureOptions', 'dTable', 'upDownBars', 'dropLines', 'hiLowLines', 'view3D']);
+/** ส่วนที่ทำให้กราฟเกินขอบเขต 5.18 (ไม่นำเข้า) */
+const OUT_OF_SCOPE_IN_SERIES = new Set(['trendline', 'errBars']);
 
-interface ParsedRef {
-  sheet: string | null;
-  r1: number;
-  c1: number;
-  r2: number;
-  c2: number;
-}
+export type ParsedChart = Omit<SheetChart, 'id' | 'anchor' | 'width' | 'height'>;
 
-/** อ่าน 'ชื่อชีต'!$A$1:$B$5 หรือ ชีต!A1 */
-export function parseChartRef(f: string): ParsedRef | null {
-  const text = f.trim();
-  let sheet: string | null = null;
-  let rest = text;
-  if (text.startsWith("'")) {
-    let i = 1;
-    let name = '';
-    while (i < text.length) {
-      if (text[i] === "'") {
-        if (text[i + 1] === "'") {
-          name += "'";
-          i += 2;
-          continue;
-        }
-        break;
-      }
-      name += text[i++];
-    }
-    if (text[i + 1] !== '!') return null;
-    sheet = name;
-    rest = text.slice(i + 2);
-  } else {
-    const bang = text.lastIndexOf('!');
-    if (bang >= 0) {
-      sheet = text.slice(0, bang);
-      rest = text.slice(bang + 1);
-    }
-  }
-  rest = rest.replace(/\$/g, '');
-  if (rest.includes(':')) {
-    const r = parseRange(rest);
-    return r ? { sheet, r1: Math.min(r.r1, r.r2), c1: Math.min(r.c1, r.c2), r2: Math.max(r.r1, r.r2), c2: Math.max(r.c1, r.c2) } : null;
-  }
-  const p = parseA1(rest);
-  return p ? { sheet, r1: p.r, c1: p.c, r2: p.r, c2: p.c } : null;
-}
-
-function refOf(node: XmlNode | undefined): ParsedRef | null | undefined {
+/** reference ของกราฟจากไฟล์ → reference ในโมเดล (ไม่มีชื่อชีต = ชีตที่กราฟอยู่); undefined = ไม่มี, null = ใช้ไม่ได้ */
+function refOf(node: XmlNode | undefined, hostSheet: string): ParsedChartRef | null | undefined {
   if (!node) return undefined;
   const refNode = child(node, XML_NS.c, 'strRef') ?? child(node, XML_NS.c, 'numRef');
   const f = child(refNode, XML_NS.c, 'f');
-  return f ? parseChartRef(textOf(f)) : null;
+  return f ? parseChartRef(textOf(f), hostSheet) : null;
 }
 
-function chartTitle(chartNode: XmlNode | undefined): string {
-  const title = child(chartNode, XML_NS.c, 'title');
+function isLine(r: ParsedChartRef): boolean {
+  return r.r1 === r.r2 || r.c1 === r.c2;
+}
+
+function richOrCachedText(title: XmlNode | undefined): string {
   if (!title) return '';
-  const tx = child(title, XML_NS.c, 'tx');
-  const rich = child(tx, XML_NS.c, 'rich');
+  const rich = child(child(title, XML_NS.c, 'tx'), XML_NS.c, 'rich');
   if (rich) {
     return childrenOf(rich, XML_NS.a, 'p')
       .map((p) => descendants(p, XML_NS.a, 't').map(textOf).join(''))
       .join(' ')
       .trim();
   }
-  // ชื่อจากเซล: ใช้ค่า cache
+  // ชื่อจากเซล: ใช้ค่า cache (ในแอปเป็นข้อความคงที่)
   return descendants(title, XML_NS.c, 'v').map(textOf).join('').trim();
 }
 
+/** สีชุดข้อมูลจาก spPr (srgbClr); สีจากธีมของ Office (schemeClr) อ่านไม่ได้ → จานสีของแอป */
+function seriesColor(ser: XmlNode, type: ChartType, i: number): string {
+  const spPr = child(ser, XML_NS.c, 'spPr');
+  const fillOwner = type === 'line' ? child(spPr, XML_NS.a, 'ln') : spPr;
+  const rgb = child(child(fillOwner, XML_NS.a, 'solidFill'), XML_NS.a, 'srgbClr')?.attrs.val;
+  return rgb && /^[0-9a-fA-F]{6}$/.test(rgb) ? `#${rgb.toUpperCase()}` : paletteColor(i);
+}
+
+function showsValues(dLbls: XmlNode | undefined): boolean {
+  return child(dLbls, XML_NS.c, 'showVal')?.attrs.val === '1' && child(dLbls, XML_NS.c, 'delete')?.attrs.val !== '1';
+}
+
 /**
- * แปลง XML กราฟเป็นชนิด/ชื่อ/ช่วง ถ้าเข้ารูปแบบที่แอปรองรับ (SPEC 5.18) มิฉะนั้นคืน null
+ * แปลง XML กราฟเป็นกราฟในแอป ถ้าเข้าขอบเขต 5.18 มิฉะนั้นคืน null
+ * hostSheetName: ชีตที่กราฟอยู่ (ใช้กับ reference ที่ไม่มีชื่อชีต)
  */
-export function parseChartXml(xml: string, hostSheetName: string): { type: ChartType; title: string; range: NonNullable<SheetChart['range']>; formatting: boolean } | null {
+export function parseChartXml(xml: string, hostSheetName: string): ParsedChart | null {
   const space = parseXml(xml);
   const chartNode = child(space, XML_NS.c, 'chart');
   const plotArea = child(chartNode, XML_NS.c, 'plotArea');
   if (!plotArea) return null;
-  const AXES = new Set(['layout', 'catAx', 'valAx', 'dateAx', 'serAx', 'spPr', 'extLst']);
-  const plots = plotArea.children.filter((c) => c.uri === XML_NS.c && !AXES.has(c.local));
-  if (plots.length !== 1) return null;
+  const NOT_PLOT = new Set(['layout', 'catAx', 'valAx', 'dateAx', 'serAx', 'spPr', 'dTable', 'extLst']);
+  const plots = plotArea.children.filter((c) => c.uri === XML_NS.c && !NOT_PLOT.has(c.local));
+  if (plots.length !== 1) return null; // combo
+  if (childrenOf(plotArea, XML_NS.c, 'valAx').length > 1) return null; // แกนรอง
+  if (childrenOf(plotArea, XML_NS.c, 'serAx').length > 0 || child(chartNode, XML_NS.c, 'view3D')) return null;
   const plot = plots[0];
+
   let type: ChartType;
   if (plot.local === 'barChart') {
-    const dir = child(plot, XML_NS.c, 'barDir')?.attrs.val;
-    if (dir !== 'col') return null; // แท่งแนวนอนไม่รองรับ
-    const grouping = child(plot, XML_NS.c, 'grouping')?.attrs.val ?? 'clustered';
-    if (grouping !== 'clustered') return null;
+    if (child(plot, XML_NS.c, 'barDir')?.attrs.val !== 'col') return null; // แท่งแนวนอน
+    if ((child(plot, XML_NS.c, 'grouping')?.attrs.val ?? 'clustered') !== 'clustered') return null;
     type = 'bar';
   } else if (plot.local === 'lineChart') {
-    const grouping = child(plot, XML_NS.c, 'grouping')?.attrs.val ?? 'standard';
-    if (grouping !== 'standard') return null;
+    if ((child(plot, XML_NS.c, 'grouping')?.attrs.val ?? 'standard') !== 'standard') return null;
     type = 'line';
   } else if (plot.local === 'pieChart') {
     type = 'pie';
@@ -386,47 +453,55 @@ export function parseChartXml(xml: string, hostSheetName: string): { type: Chart
 
   let sers = childrenOf(plot, XML_NS.c, 'ser');
   if (sers.length === 0) return null;
+  if (sers.some((s) => s.children.some((c) => c.uri === XML_NS.c && OUT_OF_SCOPE_IN_SERIES.has(c.local)))) return null;
   if (type === 'pie') sers = sers.slice(0, 1);
+  if (sers.length > MAX_CHART_SERIES) return null;
 
-  const onHost = (r: ParsedRef | null | undefined) => !r || r.sheet === null || sameSheetName(r.sheet, hostSheetName);
-  const vals = sers.map((s) => refOf(child(s, XML_NS.c, 'val')));
-  const cats = sers.map((s) => refOf(child(s, XML_NS.c, 'cat')));
-  const names = sers.map((s) => refOf(child(s, XML_NS.c, 'tx')));
-  if (vals.some((v) => !v)) return null;
-  if ([...vals, ...cats, ...names].some((r) => r === null || !onHost(r))) return null;
-
-  const v0 = vals[0]!;
-  // ชุดข้อมูลแต่ละชุดเป็นคอลัมน์เดียว แถวเดียวกัน และเรียงคอลัมน์ติดกัน
-  for (let i = 0; i < vals.length; i++) {
-    const v = vals[i]!;
-    if (v.c1 !== v.c2 || v.r1 !== v0.r1 || v.r2 !== v0.r2 || v.c1 !== v0.c1 + i) return null;
+  const series: ChartSeries[] = [];
+  for (const [i, ser] of sers.entries()) {
+    const values = refOf(child(ser, XML_NS.c, 'val'), hostSheetName);
+    if (!values || !isLine(values)) return null; // ค่าต้องอ้างช่วงเซลแถวเดียว/คอลัมน์เดียว
+    const catNode = child(ser, XML_NS.c, 'cat');
+    const categories = refOf(catNode, hostSheetName);
+    if (catNode && (!categories || !isLine(categories))) return null; // ป้ายแบบหลายระดับหรือค่าคงที่
+    const txNode = child(ser, XML_NS.c, 'tx');
+    let name: ChartSeries['name'] = { text: '' };
+    if (child(txNode, XML_NS.c, 'strRef')) {
+      const nameRef = refOf(txNode, hostSheetName);
+      if (!nameRef) return null;
+      name = { ref: makeChartRef(nameRef.sheet, nameRef.r1, nameRef.c1) };
+    } else if (txNode) {
+      name = { text: textOf(child(txNode, XML_NS.c, 'v')) };
+    }
+    const s: ChartSeries = {
+      name,
+      values: makeChartRef(values.sheet, values.r1, values.c1, values.r2, values.c2),
+      color: seriesColor(ser, type, i),
+    };
+    if (categories) s.categories = makeChartRef(categories.sheet, categories.r1, categories.c1, categories.r2, categories.c2);
+    series.push(s);
   }
-  const cat = cats[0];
-  if (cats.some((c) => (c ? !cat || c.c1 !== cat.c1 || c.r1 !== cat.r1 || c.r2 !== cat.r2 : !!cat))) return null;
-  if (cat && (cat.c1 !== cat.c2 || cat.r1 !== v0.r1 || cat.r2 !== v0.r2 || cat.c1 !== v0.c1 - 1)) return null;
-  if (!cat && vals.length > 1) return null;
 
-  // ชื่อชุดข้อมูล: ทุกชุดอยู่แถวเหนือข้อมูลในคอลัมน์ของตัวเอง หรือไม่มีเลย
-  const withName = names.filter(Boolean).length;
-  if (withName !== 0 && withName !== names.length) return null;
-  if (withName > 0 && names.some((n, i) => n!.r1 !== v0.r1 - 1 || n!.r2 !== n!.r1 || n!.c1 !== vals[i]!.c1 || n!.c2 !== n!.c1)) return null;
+  const legendNode = child(chartNode, XML_NS.c, 'legend');
+  let legend: ChartLegend = 'none';
+  if (legendNode) {
+    const pos = child(legendNode, XML_NS.c, 'legendPos')?.attrs.val ?? 'r';
+    legend = pos === 'b' || pos === 't' ? 'bottom' : 'right';
+  }
+  const catAx = child(plotArea, XML_NS.c, 'catAx') ?? child(plotArea, XML_NS.c, 'dateAx');
+  const valAx = child(plotArea, XML_NS.c, 'valAx');
+  const dataLabels =
+    showsValues(child(plot, XML_NS.c, 'dLbls')) || sers.some((s) => showsValues(child(s, XML_NS.c, 'dLbls')));
 
-  const range = {
-    r1: withName > 0 ? v0.r1 - 1 : v0.r1,
-    c1: cat ? cat.c1 : v0.c1,
-    r2: v0.r2,
-    c2: vals[vals.length - 1]!.c1,
+  return {
+    type,
+    title: richOrCachedText(child(chartNode, XML_NS.c, 'title')),
+    series,
+    legend,
+    xTitle: type === 'pie' ? '' : richOrCachedText(child(catAx, XML_NS.c, 'title')),
+    yTitle: type === 'pie' ? '' : richOrCachedText(child(valAx, XML_NS.c, 'title')),
+    dataLabels,
   };
-  return { type, title: chartTitle(chartNode), range, formatting: hasFormatting(space) };
-}
-
-function hasFormatting(node: XmlNode): boolean {
-  for (const c of node.children) {
-    if (c.uri === XML_NS.c && FORMATTING_ELEMENTS.has(c.local)) return true;
-    if (c.uri === XML_NS.c && c.local === 'rich') continue; // ข้อความชื่อกราฟ ไม่นับ
-    if (hasFormatting(c)) return true;
-  }
-  return false;
 }
 
 function cellAnchor(node: XmlNode | undefined): CellAnchorEmu | null {
@@ -435,41 +510,91 @@ function cellAnchor(node: XmlNode | undefined): CellAnchorEmu | null {
   return { col: n('col'), colOff: n('colOff'), row: n('row'), rowOff: n('rowOff') };
 }
 
+function placement(sheet: Sheet, anchorNode: XmlNode): Pick<SheetChart, 'anchor' | 'width' | 'height'> | null {
+  const size = (ext: XmlNode) => ({
+    width: Math.max(MIN_CHART_WIDTH, Math.round(Number(ext.attrs.cx) / EMU_PER_PX) || 0),
+    height: Math.max(MIN_CHART_HEIGHT, Math.round(Number(ext.attrs.cy) / EMU_PER_PX) || 0),
+  });
+  if (anchorNode.local === 'twoCellAnchor') {
+    const from = cellAnchor(child(anchorNode, XML_NS.xdr, 'from'));
+    const to = cellAnchor(child(anchorNode, XML_NS.xdr, 'to'));
+    return from && to ? twoCellAnchorToChart(sheet, from, to) : null;
+  }
+  if (anchorNode.local === 'oneCellAnchor') {
+    const from = cellAnchor(child(anchorNode, XML_NS.xdr, 'from'));
+    const ext = child(anchorNode, XML_NS.xdr, 'ext');
+    if (!from || !ext) return null;
+    return {
+      anchor: { row: from.row, col: from.col, dx: Math.round(from.colOff / EMU_PER_PX), dy: Math.round(from.rowOff / EMU_PER_PX) },
+      ...size(ext),
+    };
+  }
+  if (anchorNode.local === 'absoluteAnchor') {
+    const pos = child(anchorNode, XML_NS.xdr, 'pos');
+    const ext = child(anchorNode, XML_NS.xdr, 'ext');
+    if (!pos || !ext) return null;
+    return { anchor: pxToAnchor(sheet, Number(pos.attrs.x) / EMU_PER_PX, Number(pos.attrs.y) / EMU_PER_PX), ...size(ext) };
+  }
+  return null;
+}
+
 export interface ReadChartsResult {
   /** กราฟที่อ่านได้ ตามลำดับชีตของ sheets ที่ส่งเข้ามา */
   chartsBySheet: SheetChart[][];
-  /** มีกราฟที่แอปไม่รองรับ (จะหายเมื่อบันทึก) */
+  /** มีกราฟที่นำเข้าไม่ได้ (จะหายเมื่อบันทึก) */
   unsupported: boolean;
-  /** มีกราฟที่อ่านได้แต่มีการจัดรูปแบบที่แอปไม่เก็บ */
-  formatting: boolean;
+}
+
+/** ไฟล์ส่วนกราฟใหญ่เกินนี้ (ไบต์ หลังแตก zip) ไม่อ่าน */
+const MAX_PART_BYTES = MAX_XML_LENGTH;
+
+async function readPart(zip: JSZip, path: string): Promise<string | undefined> {
+  const file = zip.file(path);
+  if (!file) return undefined;
+  const size = (file as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+  if (size !== undefined && size > MAX_PART_BYTES) return undefined;
+  const text = await file.async('string');
+  return text.length > MAX_PART_BYTES ? undefined : text;
 }
 
 /** อ่านกราฟจากไฟล์ .xlsx (sheets: ชีตที่อ่านจากไฟล์เดียวกันแล้ว ใช้ชื่อและความกว้าง/สูง) */
 export async function readChartsFromXlsx(bytes: Uint8Array, sheets: Sheet[]): Promise<ReadChartsResult> {
-  const result: ReadChartsResult = { chartsBySheet: sheets.map(() => []), unsupported: false, formatting: false };
+  const result: ReadChartsResult = { chartsBySheet: sheets.map(() => []), unsupported: false };
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(bytes);
   } catch {
     return result;
   }
+  // ใช้รายชื่อไฟล์ใน zip ตรวจว่ามีกราฟ (ExcelJS ทิ้งกราฟตั้งแต่ตอนอ่าน)
   const allCharts = Object.keys(zip.files).filter((n) => /^xl\/charts\/chart[^/]*\.xml$/.test(n));
-  const { byName, chartsheets } = await sheetParts(zip);
-  if (chartsheets > 0) result.unsupported = true;
+  let parts: Awaited<ReturnType<typeof sheetParts>>;
+  try {
+    parts = await sheetParts(zip);
+  } catch {
+    return { ...result, unsupported: allCharts.length > 0 };
+  }
+  if (parts.chartsheets > 0) result.unsupported = true;
   const used = new Set<string>();
 
-  for (const part of byName) {
+  for (const part of parts.byName) {
     const sheetIndex = sheets.findIndex((s) => s.name === part.name);
     if (sheetIndex < 0) continue;
     const sheet = sheets[sheetIndex];
-    const sheetRels = await readRels(zip, part.path);
+    let sheetRels: Rel[];
+    try {
+      sheetRels = await readRels(zip, part.path);
+    } catch {
+      continue;
+    }
     for (const drawingRel of sheetRels.filter((r) => r.type === REL_TYPE.drawing)) {
-      const drawingXml = await readText(zip, drawingRel.target);
-      if (!drawingXml) continue;
-      const drawingRels = await readRels(zip, drawingRel.target);
       let root: XmlNode;
+      let drawingRels: Rel[];
       try {
+        const drawingXml = await readPart(zip, drawingRel.target);
+        if (!drawingXml) continue;
         root = parseXml(drawingXml);
+        drawingRels = await readRels(zip, drawingRel.target);
       } catch {
         continue;
       }
@@ -479,45 +604,19 @@ export async function readChartsFromXlsx(bytes: Uint8Array, sheets: Sheet[]): Pr
         const rel = drawingRels.find((r) => r.id === chartRefNode.nsAttrs[`${XML_NS.r}|id`]);
         if (!rel) continue;
         used.add(rel.target);
-        const xml = await readText(zip, rel.target);
-        let parsed: ReturnType<typeof parseChartXml> = null;
+        let parsed: ParsedChart | null = null;
         try {
+          const xml = await readPart(zip, rel.target);
           parsed = xml ? parseChartXml(xml, sheet.name) : null;
         } catch {
           parsed = null;
         }
-        let place: Pick<SheetChart, 'anchor' | 'width' | 'height'> | null = null;
-        if (anchorNode.local === 'twoCellAnchor') {
-          const from = cellAnchor(child(anchorNode, XML_NS.xdr, 'from'));
-          const to = cellAnchor(child(anchorNode, XML_NS.xdr, 'to'));
-          if (from && to) place = twoCellAnchorToChart(sheet, from, to);
-        } else if (anchorNode.local === 'oneCellAnchor') {
-          const from = cellAnchor(child(anchorNode, XML_NS.xdr, 'from'));
-          const ext = child(anchorNode, XML_NS.xdr, 'ext');
-          if (from && ext) {
-            place = {
-              anchor: { row: from.row, col: from.col, dx: Math.round(from.colOff / EMU_PER_PX), dy: Math.round(from.rowOff / EMU_PER_PX) },
-              width: Math.max(MIN_CHART_WIDTH, Math.round(Number(ext.attrs.cx) / EMU_PER_PX)),
-              height: Math.max(MIN_CHART_HEIGHT, Math.round(Number(ext.attrs.cy) / EMU_PER_PX)),
-            };
-          }
-        } else if (anchorNode.local === 'absoluteAnchor') {
-          const pos = child(anchorNode, XML_NS.xdr, 'pos');
-          const ext = child(anchorNode, XML_NS.xdr, 'ext');
-          if (pos && ext) {
-            place = {
-              anchor: pxToAnchor(sheet, Number(pos.attrs.x) / EMU_PER_PX, Number(pos.attrs.y) / EMU_PER_PX),
-              width: Math.max(MIN_CHART_WIDTH, Math.round(Number(ext.attrs.cx) / EMU_PER_PX)),
-              height: Math.max(MIN_CHART_HEIGHT, Math.round(Number(ext.attrs.cy) / EMU_PER_PX)),
-            };
-          }
-        }
+        const place = placement(sheet, anchorNode);
         if (!parsed || !place) {
           result.unsupported = true;
           continue;
         }
-        if (parsed.formatting) result.formatting = true;
-        result.chartsBySheet[sheetIndex].push({ id: newChartId(), type: parsed.type, title: parsed.title, range: parsed.range, ...place });
+        result.chartsBySheet[sheetIndex].push({ id: newChartId(), ...parsed, ...place });
       }
     }
   }

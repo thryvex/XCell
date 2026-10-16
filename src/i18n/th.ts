@@ -498,4 +498,8 @@ export const th = {
     defaultSheetPrefix: 'ชีต',
     tabTooltip: '{name} (ดับเบิลคลิกเพื่อเปลี่ยนชื่อ, คลิกขวาสำหรับตัวเลือก)',
   },
+  chart: {
+    unsupportedInFile: 'กราฟชนิดที่แอปไม่รองรับ จะหายเมื่อบันทึก',
+    defaultSeriesName: 'ชุดข้อมูล {n}',
+  },
 };

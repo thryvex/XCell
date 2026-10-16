@@ -7,6 +7,7 @@ import {
 } from './sheetName';
 import { renameSheetInFormula, invalidateSheetInFormula } from './refshift';
 import { th } from '../i18n/th';
+import { renameSheetInCharts, invalidateSheetInCharts, retargetDuplicatedCharts } from './chart';
 
 export interface SheetOpResult {
   ok: boolean;
@@ -58,7 +59,7 @@ export function addSheet(wb: Workbook): SheetOpResult {
   return { ok: true, index: wb.sheets.length - 1 };
 }
 
-/** ทำสำเนาชีตไว้ถัดจากต้นฉบับ ชื่อ "สำเนาของ X" ที่ไม่ซ้ำ; สูตรคัดลอกตามเดิมทุกตัวอักษร */
+/** ทำสำเนาชีตไว้ถัดจากต้นฉบับ ชื่อ "สำเนาของ X" ที่ไม่ซ้ำ; สูตรคัดลอกตามเดิมทุกตัวอักษร (กราฟดู retargetDuplicatedCharts) */
 export function duplicateSheet(wb: Workbook, index: number): SheetOpResult {
   const source = wb.sheets[index];
   if (!source) return { ok: false };
@@ -67,6 +68,8 @@ export function duplicateSheet(wb: Workbook, index: number): SheetOpResult {
   copy.id = newSheetId();
   copy.name = generateDuplicateSheetName(source.name, sheetNames(wb));
   delete copy.hidden;
+  // กราฟ: id ใหม่ และ reference ที่ชี้ชีตต้นฉบับชี้สำเนา (5D)
+  retargetDuplicatedCharts(copy, source.name);
 
   wb.sheets.splice(index + 1, 0, copy);
   return { ok: true, index: index + 1 };
@@ -86,6 +89,7 @@ export function renameSheet(wb: Workbook, index: number, newName: string): Sheet
   sheet.name = trimmed;
   // เขียนสูตรทุกเซลในทุกชีตที่อ้างถึงชื่อเดิมให้เป็นชื่อใหม่
   rewriteAllFormulas(wb, (raw) => renameSheetInFormula(raw, oldName, trimmed));
+  renameSheetInCharts(wb, oldName, trimmed);
   return { ok: true, index };
 }
 
@@ -120,6 +124,8 @@ export function deleteSheet(wb: Workbook, index: number): SheetOpResult {
   wb.sheets.splice(index, 1);
   // reference ที่ชี้ชีตที่ถูกลบกลายเป็น #REF! (Undo ใช้ snapshot คืนสูตรเดิมทั้งหมด)
   rewriteAllFormulas(wb, (raw) => invalidateSheetInFormula(raw, sheet.name));
+  // กราฟบนชีตที่ลบหายไปพร้อมชีต; กราฟชีตอื่นที่อ้างชีตนี้แสดง "ข้อมูลหาย" (5D)
+  invalidateSheetInCharts(wb, sheet.name);
   const next = nearestVisibleSheet(wb, Math.min(index, wb.sheets.length - 1));
   return { ok: true, index: next };
 }
