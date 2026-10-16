@@ -12,7 +12,7 @@ XCell เป็นโปรแกรมตารางคำนวณ (สเป
 - บันทึกไฟล์กู้คืนระหว่างทำงาน เผื่อโปรแกรมปิดผิดปกติ
 
 ## ติดตั้งบน Windows
-1. ดาวน์โหลด `XCell Setup 0.1.0.exe` จากหน้า [Releases](https://github.com/bosschaisit/XCell/releases) (หรือ `XCell 0.1.0.exe` แบบพกพา ไม่ต้องติดตั้ง)
+1. ดาวน์โหลดตัวติดตั้ง `XCell.Setup.0.1.0.exe` จากหน้า [Releases](https://github.com/bosschaisit/XCell/releases)
 2. เปิดไฟล์ที่ดาวน์โหลด
 3. ตัวติดตั้งยังไม่ได้เซ็นชื่อดิจิทัล Windows จึงอาจขึ้นหน้าต่างสีน้ำเงิน "Windows protected your PC" (SmartScreen)
    - คลิก **More info** (ข้อมูลเพิ่มเติม)

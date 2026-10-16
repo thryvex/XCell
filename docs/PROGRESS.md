@@ -401,7 +401,17 @@
   * **ยังเป็นการวัด/ทดสอบโดย AI เท่านั้น (เจ้าของโปรเจกต์ยังไม่ได้แจ้งผล):** ผลทดลองความกว้างคอลัมน์ใน Google Sheets (V1–V7) และการแปลง 7 px ต่อหน่วย, คำเตือนกราฟตอนเปิด/บันทึกทับ, การเปิดไฟล์ที่ XCell บันทึกใน Google Sheets หลังแก้ความกว้างและหลังเพิ่ม A:A
   * **ยังไม่มีใครทดสอบ:** เปิดไฟล์ใน Microsoft Excel, macOS, ไฟล์ต้นแบบจริงที่ใช้ `=sum(G:G)` ของเจ้าของโปรเจกต์
 
-* **สถานะ:** v0.1.0 พร้อมใน `main` ในเครื่อง (ยังไม่ push ยังไม่ติด tag; รอเจ้าของโปรเจกต์เปลี่ยนชื่อ repo บน GitHub); 5D (กราฟ) เลื่อนไป v0.2
+* **ปล่อย v0.1.0 แล้ว (2026-10-17):**
+  * เจ้าของโปรเจกต์เปลี่ยนชื่อ repo บน GitHub เป็น `bosschaisit/XCell` (Claude Code กด Rename ผ่าน Chrome ตามคำสั่ง) และ remote ในเครื่องเป็น `https://github.com/bosschaisit/XCell.git`; คำอธิบาย repo เปลี่ยนเป็น "โปรแกรมตารางคำนวณออฟไลน์สำหรับ Windows ใช้งานคล้าย Google Sheets เปิดและบันทึกไฟล์ .xlsx ภาษาไทยทั้งโปรแกรม"
+  * push `main` (`4bb2d47`) และ tag `v0.1.0` เท่านั้น (ไม่ push `phase-5d-step1-wip`); push ครั้งแรกถูกปฏิเสธเพราะ token เดิมไม่มี scope `workflow` → ติดตั้ง GitHub CLI (winget) เจ้าของโปรเจกต์ login `gh` ด้วย `--scopes workflow` แล้ว `gh auth setup-git`
+  * GitHub Actions run 38947270321 ผ่านทุกขั้น (checkout v7, setup-node v7 / Node 22, npm ci, npm test, npm run build, electron-builder --publish never, action-gh-release v3) → draft release มีไฟล์เดียว `XCell.Setup.0.1.0.exe` (GitHub เปลี่ยนช่องว่างในชื่อเป็นจุด) 88,200,455 ไบต์
+  * ใส่คำอธิบาย release ตามที่เจ้าของโปรเจกต์เขียน (เพิ่มบรรทัดเทมเพลตรายรับรายจ่าย) แล้ว Publish เป็น Latest ไม่ใช่ pre-release: https://github.com/bosschaisit/XCell/releases/tag/v0.1.0
+  * repo เป็น Public (สแกนประวัติทุก branch บน GitHub ก่อนเปลี่ยน ไม่พบ token/คีย์/รหัสผ่าน อีเมลผู้ commit เป็น `dev@sheeteasy.local`); ปิด Issues / Wiki / Projects / Discussions; interaction limit = collaborators_only หมดอายุ **2027-04-16** (สูงสุดที่ GitHub ให้ 6 เดือน); ปิด fork ไม่ได้ (GitHub อนุญาตเฉพาะ repo ขององค์กรแบบ private); ทุก branch ที่ push ไว้ (`phase-2` … `phase-5d`, `chart-spike`) เปิดให้ทุกคนเห็น
+  * ตรวจแล้ว: ไม่ล็อกอินก็เปิดหน้า release และดาวน์โหลดไฟล์ได้ (HTTP 200)
+  * README แก้ชื่อไฟล์ดาวน์โหลดเป็น `XCell.Setup.0.1.0.exe` และเอาไฟล์แบบพกพาออก (workflow อัปโหลดเฉพาะตัวติดตั้ง)
+  * **ยังไม่ได้ตรวจ:** ติดตั้งจากไฟล์ที่ดาวน์โหลดจาก release (build บน GitHub ไม่ใช่ไฟล์เดียวกับที่เจ้าของโปรเจกต์ทดสอบในเครื่อง), เปิดไฟล์ที่ XCell บันทึกใน Google Sheets หลังงานความกว้าง/A:A, Microsoft Excel
+
+* **สถานะ:** v0.1.0 ปล่อยแล้ว (GitHub Release, repo Public); 5D (กราฟ) เลื่อนไป v0.2
 
 ---
 
