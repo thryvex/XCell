@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- XCell icon, small (24–32 px): pixel-aligned on a 32 grid, thicker frame, no glow -->
+  <rect x="0" y="0" width="32" height="32" rx="6" fill="#0b1410" />
+  <rect x="2" y="2" width="28" height="28" rx="5" fill="none" stroke="#34e38a" stroke-width="2" />
+  <rect x="7" y="7" width="8" height="5" rx="1" fill="#34e38a" />
+  <rect x="17" y="7" width="8" height="5" rx="1" fill="#34e38a" />
+  <rect x="7" y="14" width="8" height="5" rx="1" fill="#34e38a" fill-opacity="0.55" />
+  <rect x="17" y="14" width="8" height="5" rx="1" fill="#34e38a" fill-opacity="0.55" />
+  <rect x="7" y="21" width="8" height="4" rx="1" fill="#34e38a" fill-opacity="0.55" />
+  <rect x="17" y="21" width="8" height="4" rx="1" fill="#34e38a" fill-opacity="0.55" />
+</svg>

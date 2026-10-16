@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- XCell icon, 16 px: drawn on whole pixels (1 px frame, 2 × 3 cells with 1 px gaps), no glow -->
+  <rect x="0" y="0" width="16" height="16" fill="#0b1410" />
+  <path d="M1 1h14v14H1z M2 2v12h12V2z" fill="#34e38a" fill-rule="evenodd" />
+  <rect x="4" y="4" width="3" height="2" fill="#34e38a" />
+  <rect x="9" y="4" width="3" height="2" fill="#34e38a" />
+  <rect x="4" y="7" width="3" height="2" fill="#34e38a" fill-opacity="0.6" />
+  <rect x="9" y="7" width="3" height="2" fill="#34e38a" fill-opacity="0.6" />
+  <rect x="4" y="10" width="3" height="2" fill="#34e38a" fill-opacity="0.6" />
+  <rect x="9" y="10" width="3" height="2" fill="#34e38a" fill-opacity="0.6" />
+</svg>

@@ -19,3 +19,6 @@ yarn-error.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# รูปอ้างอิงที่ไม่ใช้เป็นไอคอน (ห้าม commit)
+build/Neon Xcel Spreadsheet Logo.png
