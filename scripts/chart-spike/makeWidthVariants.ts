@@ -7,6 +7,9 @@
  *   V1: แก้ <dimension> ให้ครอบทุกคอลัมน์/แถวที่ตั้งขนาดหรือมีกราฟ (แก้ XML หลังเขียน — ExcelJS ไม่มี API ตั้ง dimension)
  *   V2: ตั้ง sheetFormatPr defaultColWidth / defaultRowHeight ผ่าน ws.properties ของ ExcelJS ให้ตรงกับแอป
  *   V3: ทั้งสองอย่าง
+ *   V4: V2 + มีค่าในเซล G1/H1 (คอลัมน์ G/H ไม่ว่าง)    — แยกสาเหตุที่ G/H ถูกเมิน
+ *   V5: V2 + ไม่มีกราฟเส้น (ไม่มีกราฟทับ G/H)         — แยกสาเหตุที่ G/H ถูกเมิน
+ *   รันเฉพาะ V4/V5: npx vite-node scripts/chart-spike/makeWidthVariants.ts --gh
  * ทุกไฟล์มีข้อความ "ไม่มีข้อมูล" ใน C3 (ช่วงค่าของกราฟเส้น ชุด "ไตรมาส 2") เพื่อดูว่า Google Sheets วาดเป็น 0 หรือช่องว่าง
  */
 import { writeFileSync } from 'node:fs';
@@ -26,7 +29,7 @@ import { createEmptySheet, Sheet, SheetChart, Workbook, ChartType } from '../../
 
 const OUT = join(__dirname, 'out');
 
-function workbook(): Workbook {
+function workbook(opts: { ghValues?: boolean; noLine?: boolean } = {}): Workbook {
   const s: Sheet = createEmptySheet('หลายกราฟ');
   s.colWidths = { 0: 64, 1: 200, 2: 80, 3: 160, 5: 64, 6: 240, 7: 96 };
   s.rowHeights = { 0: 40, 6: 60 };
@@ -42,6 +45,10 @@ function workbook(): Workbook {
     put(`D${i + 2}`, 120 - i * 10);
   });
   put('C3', 'ไม่มีข้อมูล'); // ข้อความในช่วงค่า: แอปวาดเป็น 0
+  if (opts.ghValues) {
+    put('G1', 'ค่า G');
+    put('H1', 'ค่า H');
+  }
   s.filter = { r1: 0, c1: 0, r2: 5, c2: 3, columns: {} };
   s.hiddenRows = [3];
 
@@ -63,6 +70,7 @@ function workbook(): Workbook {
     }),
     chart({ r1: 0, c1: 0, r2: 5, c2: 1 }, 'pie', { row: 20, col: 2, dx: 0, dy: 0 }, { title: 'ไตรมาส 1', width: 300, height: 300 }),
   ];
+  if (opts.noLine) s.charts = s.charts.filter((c) => c.type !== 'line');
   return wb;
 }
 
@@ -72,8 +80,8 @@ function colLetters(c: number): string {
   return s;
 }
 
-async function build(file: string, opts: { dimension: boolean; defaults: boolean }) {
-  const wb = workbook();
+async function build(file: string, opts: { dimension: boolean; defaults: boolean; ghValues?: boolean; noLine?: boolean }) {
+  const wb = workbook(opts);
   const excel = await workbookToExcelJS(wb);
   if (opts.defaults) {
     // ค่าเริ่มต้นของแอป: คอลัมน์ 110 px (หน่วยละ 8 px ตามที่แอปแปลงความกว้าง) แถว 28 px = 21 pt
@@ -107,6 +115,11 @@ async function build(file: string, opts: { dimension: boolean; defaults: boolean
   console.log('  ' + check.match(/<cols>.*?<\/cols>/s)![0]);
 }
 
-await build('sample-c-v1-dimension.xlsx', { dimension: true, defaults: false });
-await build('sample-c-v2-defaults.xlsx', { dimension: false, defaults: true });
-await build('sample-c-v3-both.xlsx', { dimension: true, defaults: true });
+if (process.argv.includes('--gh')) {
+  await build('sample-c-v4-gh-values.xlsx', { dimension: false, defaults: true, ghValues: true });
+  await build('sample-c-v5-no-line.xlsx', { dimension: false, defaults: true, noLine: true });
+} else {
+  await build('sample-c-v1-dimension.xlsx', { dimension: true, defaults: false });
+  await build('sample-c-v2-defaults.xlsx', { dimension: false, defaults: true });
+  await build('sample-c-v3-both.xlsx', { dimension: true, defaults: true });
+}
