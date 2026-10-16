@@ -257,7 +257,9 @@ export const Grid: React.FC = () => {
         } else {
           const rng = parseRange(t.value);
           if (rng) {
-            for (let r = rng.r1; r <= rng.r2; r++) {
+            // ทั้งคอลัมน์ (A:A): ไฮไลต์เฉพาะแถวที่แสดงอยู่ ไม่วนทุกแถว
+            const r2 = Math.min(rng.r2, rowCount - 1);
+            for (let r = rng.r1; r <= r2; r++) {
               for (let c = rng.c1; c <= rng.c2; c++) {
                 map[cellToA1(r, c)] = color;
               }

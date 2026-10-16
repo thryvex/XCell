@@ -127,7 +127,7 @@ describe('Templates (Phase 3D)', () => {
       });
       expect(sheet.cells['H1']).toBeUndefined();
       expect(sheet.cells['I1']).toEqual({ raw: 'รวมทั้งหมด', style: { fill: '#6d9eeb' } });
-      expect(sheet.cells['J1']).toEqual({ raw: '=SUM(G2:G10000)', style: { fill: '#ffffff' } });
+      expect(sheet.cells['J1']).toEqual({ raw: '=SUM(G:G)', style: { fill: '#ffffff' } });
 
       // ตัวอย่าง 3 แถว พร้อมสูตร
       for (const [r, name] of [[2, 'ตัวอย่าง 1'], [3, 'ตัวอย่าง 2'], [4, 'ตัวอย่าง 3']] as const) {
@@ -163,7 +163,7 @@ describe('Templates (Phase 3D)', () => {
       expect(evaluator.getCellValue('J1')).toBeCloseTo(5784.8);
     });
 
-    it('includes a new row 5 (and the last supported row) in the J1 total', () => {
+    it('includes a new row 5 (and rows far below) in the J1 total without a cycle', () => {
       const sheet = createInventoryWorkbook().sheets[0];
       const evaluator = new Evaluator(sheet);
       expect(evaluator.getCellValue('J1')).toBeCloseTo(5784.8);

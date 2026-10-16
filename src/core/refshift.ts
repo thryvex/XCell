@@ -1,5 +1,5 @@
 import { tokenize, Token } from './tokenizer';
-import { parseA1, parseRange, cellToA1, RangeCoord } from './address';
+import { parseA1, parseRange, cellToA1, colToStr, RangeCoord } from './address';
 import { formatSheetReference, sameSheetName } from './sheetName';
 
 /**
@@ -56,6 +56,9 @@ function isInScope(t: RefToken, scope?: RefScope): boolean {
 }
 
 function formatRange(rng: RangeCoord, r1: number, c1: number, r2: number, c2: number): string {
+  if (rng.wholeColumns) {
+    return `${rng.startColAbs ? '$' : ''}${colToStr(c1)}:${rng.endColAbs ? '$' : ''}${colToStr(c2)}`;
+  }
   const start = cellToA1(r1, c1, rng.startColAbs, rng.startRowAbs);
   const end = cellToA1(r2, c2, rng.endColAbs, rng.endRowAbs);
   return `${start}:${end}`;
@@ -84,9 +87,10 @@ export function shiftFormula(formula: string, dr: number, dc: number): string {
     const rng = parseRange(t.value);
     if (!rng) return null;
 
-    const newR1 = rng.startRowAbs ? rng.r1 : rng.r1 + dr;
+    const rowDelta = rng.wholeColumns ? 0 : dr;
+    const newR1 = rng.startRowAbs ? rng.r1 : rng.r1 + rowDelta;
     const newC1 = rng.startColAbs ? rng.c1 : rng.c1 + dc;
-    const newR2 = rng.endRowAbs ? rng.r2 : rng.r2 + dr;
+    const newR2 = rng.endRowAbs ? rng.r2 : rng.r2 + rowDelta;
     const newC2 = rng.endColAbs ? rng.c2 : rng.c2 + dc;
 
     if (newR1 < 0 || newC1 < 0 || newR2 < 0 || newC2 < 0) return '#REF!';
@@ -126,6 +130,7 @@ export function shiftFormulaOnInsert(
 
     const rng = parseRange(t.value);
     if (!rng) return null;
+    if (rng.wholeColumns && axis === 'row') return null;
 
     let { r1, c1, r2, c2 } = rng;
 
@@ -184,6 +189,7 @@ export function shiftFormulaOnDelete(
 
     const rng = parseRange(t.value);
     if (!rng) return null;
+    if (rng.wholeColumns && axis === 'row') return null;
 
     let { r1, c1, r2, c2 } = rng;
 
@@ -307,7 +313,7 @@ export function moveRefsInFormula(formula: string, fromSheet: string, toSheet: s
     } else {
       const rng = parseRange(t.value);
       if (!rng) return null;
-      if (onSource) {
+      if (onSource && !rng.wholeColumns) {
         let all = true;
         for (let r = rng.r1; r <= rng.r2 && all; r++) {
           for (let c = rng.c1; c <= rng.c2 && all; c++) {

@@ -228,6 +228,14 @@ export function qualifiedKey(sheetIndex: number, a1: string): string {
   return `${sheetIndex}!${a1.toUpperCase()}`;
 }
 
+/**
+ * key ของการอ้างทั้งคอลัมน์ในกราฟ dependency เช่น "0!#COL6" (คอลัมน์ G ของชีตแรก)
+ * ไม่แตกเป็นรายเซล (ทั้งคอลัมน์มี 1,048,576 แถว) — เซลใดในคอลัมน์นั้นเปลี่ยน สูตรที่อ้างจะถูกคำนวณใหม่
+ */
+export function columnKey(sheetIndex: number, col: number): string {
+  return `${sheetIndex}!#COL${col}`;
+}
+
 // Extract dependent cell addresses (sheet-qualified) from formula
 export function extractDependencies(
   rawFormula: string,
@@ -252,7 +260,9 @@ export function extractDependencies(
       if (p) deps.add(qualifiedKey(targetIndex, cellToA1(p.r, p.c)));
     } else {
       const rng = parseRange(t.value);
-      if (rng) {
+      if (rng?.wholeColumns) {
+        for (let c = rng.c1; c <= rng.c2; c++) deps.add(columnKey(targetIndex, c));
+      } else if (rng) {
         for (let r = rng.r1; r <= rng.r2; r++) {
           for (let c = rng.c1; c <= rng.c2; c++) {
             deps.add(qualifiedKey(targetIndex, cellToA1(r, c)));
@@ -325,6 +335,18 @@ export class Evaluator {
       }
       this.revDepGraph.get(dep)!.add(key);
     }
+  }
+
+  /** แถว (0-based เรียงจากบนลงล่าง) ที่มีเซลอย่างน้อยหนึ่งเซลในชีต */
+  private usedRows(sheetIndex: number): number[] {
+    const cells = this.wb.sheets[sheetIndex]?.cells;
+    if (!cells) return [];
+    const rows = new Set<number>();
+    for (const key of Object.keys(cells)) {
+      const p = parseA1(key);
+      if (p) rows.add(p.r);
+    }
+    return Array.from(rows).sort((a, b) => a - b);
   }
 
   public getCellValue(a1Key: string, sheetIndex = 0): CellValue {
@@ -430,7 +452,18 @@ export class Evaluator {
         if (target < 0) return '#REF!';
         const rng = parseRange(node.rangeStr);
         if (!rng) return '#REF!';
+        // ทั้งคอลัมน์: อ่านเฉพาะแถวที่มีเซลในชีตนั้น (ไม่ไล่ 1,048,576 แถว) — ทุกช่วงทั้งคอลัมน์ในชีตเดียวกัน
+        // ใช้ชุดแถวเดียวกัน ฟังก์ชันที่จับคู่ช่วง เช่น SUMIF(A:A,"x",B:B) จึงตรงแถวกัน
+        const rows = rng.wholeColumns ? this.usedRows(target) : null;
         const values: CellValue[] = [];
+        if (rows) {
+          for (const r of rows) {
+            for (let c = rng.c1; c <= rng.c2; c++) {
+              values.push(this.getCellValue(cellToA1(r, c), target));
+            }
+          }
+          return values;
+        }
         for (let r = rng.r1; r <= rng.r2; r++) {
           for (let c = rng.c1; c <= rng.c2; c++) {
             values.push(this.getCellValue(cellToA1(r, c), target));
@@ -541,8 +574,13 @@ export class Evaluator {
 
     while (queue.length > 0) {
       const current = queue.shift()!;
-      const dependents = this.revDepGraph.get(current);
-      if (dependents) {
+      // ผู้อ้างเซลนี้โดยตรง และผู้อ้างทั้งคอลัมน์ของเซลนี้
+      const sep = current.indexOf('!');
+      const p = parseA1(current.slice(sep + 1));
+      const lists = [this.revDepGraph.get(current)];
+      if (p) lists.push(this.revDepGraph.get(columnKey(Number(current.slice(0, sep)), p.c)));
+      for (const dependents of lists) {
+        if (!dependents) continue;
         for (const dep of dependents) {
           if (!toInvalidate.has(dep)) {
             toInvalidate.add(dep);

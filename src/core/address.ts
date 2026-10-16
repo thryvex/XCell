@@ -14,7 +14,14 @@ export interface RangeCoord {
   startRowAbs?: boolean;
   endColAbs?: boolean;
   endRowAbs?: boolean;
+  /** อ้างทั้งคอลัมน์ เช่น A:A, $A:$C (SPEC 4.1) — r1 = 0, r2 = MAX_SHEET_ROWS - 1 */
+  wholeColumns?: boolean;
 }
+
+/** จำนวนแถวสูงสุดของ .xlsx (ใช้เป็นขอบล่างของการอ้างทั้งคอลัมน์ ห้ามวนทุกแถวตรงๆ) */
+export const MAX_SHEET_ROWS = 1048576;
+
+const COLUMN_PART = /^(\$?)([A-Za-z]{1,3})$/;
 
 export function colToStr(col: number): string {
   if (col < 0) return '';
@@ -76,6 +83,24 @@ export function parseRange(rangeStr: string): RangeCoord | null {
   }
 
   if (parts.length === 2) {
+    // ทั้งคอลัมน์: A:A, $A:$C
+    const k1 = COLUMN_PART.exec(parts[0].trim());
+    const k2 = COLUMN_PART.exec(parts[1].trim());
+    if (k1 && k2) {
+      const a = strToCol(k1[2]);
+      const b = strToCol(k2[2]);
+      if (a < 0 || b < 0) return null;
+      const first = a <= b;
+      return {
+        r1: 0,
+        c1: Math.min(a, b),
+        r2: MAX_SHEET_ROWS - 1,
+        c2: Math.max(a, b),
+        startColAbs: (first ? k1 : k2)[1] === '$',
+        endColAbs: (first ? k2 : k1)[1] === '$',
+        wholeColumns: true,
+      };
+    }
     const p1 = parseA1(parts[0]);
     const p2 = parseA1(parts[1]);
     if (!p1 || !p2) return null;

@@ -24,10 +24,12 @@ export interface Token {
 
 const CELL_REF_REGEX = /^\$?[A-Za-z]+\$?\d+$/;
 const RANGE_REGEX = /^\$?[A-Za-z]+\$?\d+:\$?[A-Za-z]+\$?\d+$/;
+// อ้างทั้งคอลัมน์ (SPEC 4.1): A:A, $A:$C (ไม่รองรับทั้งแถว 1:1)
+const COLUMN_RANGE_REGEX = /^\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3}$/;
 
 // อ้างข้ามชีต: 'ชื่อ ชีต'!A1, 'ชีต''s'!A1:B5 หรือแบบไม่มีเครื่องหมายคำพูด ชีต2!$A$1
 // ชื่อแบบไม่มีเครื่องหมายคำพูดประกอบด้วยตัวอักษร (รวมไทย) ตัวเลข ขีดล่างเท่านั้น
-const ADDRESS_PATTERN = String.raw`\$?[A-Za-z]+\$?\d+(?::\$?[A-Za-z]+\$?\d+)?`;
+const ADDRESS_PATTERN = String.raw`\$?[A-Za-z]+\$?\d+(?::\$?[A-Za-z]+\$?\d+)?|\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3}`;
 const REF_END = String.raw`(?![A-Za-z0-9_$฀-๿(])`;
 const QUOTED_SHEET_REF = new RegExp(String.raw`'((?:[^']|'')+)'!(${ADDRESS_PATTERN})${REF_END}`, 'y');
 const UNQUOTED_SHEET_REF = new RegExp(
@@ -231,7 +233,7 @@ export function tokenize(formulaText: string, options: { includeWhitespace?: boo
       }
       const rawWord = text.slice(start, i);
 
-      if (RANGE_REGEX.test(rawWord)) {
+      if (RANGE_REGEX.test(rawWord) || COLUMN_RANGE_REGEX.test(rawWord)) {
         tokens.push({
           type: 'RANGE',
           value: rawWord.toUpperCase(),

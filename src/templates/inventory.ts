@@ -1,9 +1,6 @@
 import { Workbook, Sheet, createEmptySheet, CellStyle } from '../core/model';
 import { buildTemplateWorkbook } from './workbook';
 
-/** แถวสุดท้ายที่สูตรรวมทั้งหมดครอบ (แอปรองรับสูงสุด 10,000 แถว; ยังไม่รองรับ G:G ทั้งคอลัมน์) */
-export const INVENTORY_TOTAL_LAST_ROW = 10000;
-
 const HEADERS = ['ลำดับ', 'ชื่อ', 'น้ำหนัก', 'เปอร์เซ็น', 'น้ำหนักสุทธิ', 'ราคา', 'รวม'];
 
 /** ตัวอย่าง: [ลำดับ, ชื่อ, น้ำหนัก, เปอร์เซ็น, ราคา] */
@@ -44,9 +41,9 @@ export function createInventoryWorkbook(): Workbook {
     sheet.cells[`G${r}`] = { raw: `=E${r}*F${r}` };
   });
 
-  // สรุปด้านขวา (H1 เว้นว่าง)
+  // สรุปด้านขวา (H1 เว้นว่าง); J1 อยู่นอกคอลัมน์ G จึงไม่เป็นวงกลม และหัวตาราง G1 เป็นข้อความที่ SUM ข้าม
   sheet.cells['I1'] = { raw: 'รวมทั้งหมด', style: { fill: '#6d9eeb' } };
-  sheet.cells['J1'] = { raw: `=SUM(G2:G${INVENTORY_TOTAL_LAST_ROW})`, style: { fill: '#ffffff' } };
+  sheet.cells['J1'] = { raw: '=SUM(G:G)', style: { fill: '#ffffff' } };
 
   return buildTemplateWorkbook([sheet]);
 }
