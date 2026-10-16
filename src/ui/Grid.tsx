@@ -9,6 +9,17 @@ import { sameSheetName, formatSheetReference } from '../core/sheetName';
 import { MergeRange, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX } from '../core/model';
 import { th } from '../i18n/th';
 import { formatDate, todaySerial } from '../core/numfmt';
+import {
+  NavGrid,
+  Direction,
+  stepCell,
+  jumpToDataEdge,
+  moveVisibleRows,
+  homePos,
+  endPos,
+  sheetStartPos,
+  sheetEndPos,
+} from '../core/navigation';
 
 const DEFAULT_COL_WIDTH = DEFAULT_COL_WIDTH_PX;
 const DEFAULT_ROW_HEIGHT = DEFAULT_ROW_HEIGHT_PX;
@@ -78,6 +89,10 @@ export const Grid: React.FC = () => {
     searchNext,
     searchPrev,
     scrollToActiveToken,
+    scrollTarget,
+    extendSelectionTo,
+    getSelectionFocus,
+    scrollToCell,
     requestSort,
     openAdvancedSort,
     toggleFilter,
@@ -144,24 +159,30 @@ export const Grid: React.FC = () => {
   useEffect(() => {
     const el = containerRef.current;
     if (!el || scrollToActiveToken === 0) return;
+    const target = scrollTarget ?? activeCell;
     const hidden = new Set(sheet.hiddenRows ?? []);
+    const rowH = (r: number) => (hidden.has(r) ? 0 : sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT);
+    const colW = (c: number) => sheet.colWidths[c] || DEFAULT_COL_WIDTH;
     let top = HEADER_ROW_HEIGHT;
-    for (let r = 0; r < activeCell.r; r++) {
-      if (!hidden.has(r)) top += sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
-    }
+    for (let r = 0; r < target.r; r++) top += rowH(r);
     let left = HEADER_COL_WIDTH;
-    for (let c = 0; c < activeCell.c; c++) {
-      left += sheet.colWidths[c] || DEFAULT_COL_WIDTH;
-    }
+    for (let c = 0; c < target.c; c++) left += colW(c);
+    // พื้นที่ที่แถว/คอลัมน์ตรึงบังไว้ด้านบน/ซ้าย
+    let frozenH = 0;
+    for (let r = 0; r < sheet.frozenRows; r++) frozenH += rowH(r);
+    let frozenW = 0;
+    for (let c = 0; c < sheet.frozenCols; c++) frozenW += colW(c);
     const zoom = (sheet.zoom ?? 100) / 100;
-    const height = (sheet.rowHeights[activeCell.r] || DEFAULT_ROW_HEIGHT) * zoom;
-    const width = (sheet.colWidths[activeCell.c] || DEFAULT_COL_WIDTH) * zoom;
+    const height = rowH(target.r) * zoom;
+    const width = colW(target.c) * zoom;
     top *= zoom;
     left *= zoom;
-    if (top < el.scrollTop + HEADER_ROW_HEIGHT * zoom || top + height > el.scrollTop + el.clientHeight) {
+    const viewTop = el.scrollTop + (HEADER_ROW_HEIGHT + frozenH) * zoom;
+    const viewLeft = el.scrollLeft + (HEADER_COL_WIDTH + frozenW) * zoom;
+    if (target.r >= sheet.frozenRows && (top < viewTop || top + height > el.scrollTop + el.clientHeight)) {
       el.scrollTop = Math.max(0, top - el.clientHeight / 2);
     }
-    if (left < el.scrollLeft + HEADER_COL_WIDTH * zoom || left + width > el.scrollLeft + el.clientWidth) {
+    if (target.c >= sheet.frozenCols && (left < viewLeft || left + width > el.scrollLeft + el.clientWidth)) {
       el.scrollLeft = Math.max(0, left - el.clientWidth / 2);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,6 +284,71 @@ export const Grid: React.FC = () => {
     const lastChar = trimmed[trimmed.length - 1];
     return '=+-*/^%&,(<>'.includes(lastChar);
   }, [isEditing, editingValue]);
+
+  // ตำแหน่งปลายทางของปุ่มเลื่อน (null = ไม่ใช่ปุ่มเลื่อน)
+  const navigationTarget = (
+    e: KeyboardEvent,
+    isCtrl: boolean
+  ): { r: number; c: number; scrollBy?: { top: number; left: number } } | null => {
+    const nav: NavGrid = {
+      rowCount,
+      colCount,
+      hiddenRows: hiddenSet,
+      merges: sheet.merges,
+      hasValue: (r, c) => Boolean(sheet.cells[cellToA1(r, c)]?.raw),
+    };
+    const from = e.shiftKey ? getSelectionFocus() : activeCell;
+    const dirs: Record<string, Direction> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+    const dir = dirs[e.key];
+    if (dir && !e.altKey) {
+      if (isCtrl) return jumpToDataEdge(nav, from, dir);
+      return stepCell(nav, from, dir) ?? from;
+    }
+    if (e.key === 'Home' && !e.altKey) return isCtrl ? sheetStartPos(nav) : homePos(nav, from);
+    if (e.key === 'End' && !e.altKey) return isCtrl ? sheetEndPos(nav) : endPos(nav, from);
+    if ((e.key === 'PageDown' || e.key === 'PageUp') && !isCtrl) {
+      const step: 1 | -1 = e.key === 'PageDown' ? 1 : -1;
+      const el = containerRef.current;
+      const zoom = zoomFactor;
+      if (e.altKey) {
+        // Alt+PageDown / Alt+PageUp: เลื่อนขวา/ซ้ายทีละความกว้างที่เห็น (ไม่นับคอลัมน์ตรึง)
+        let frozenW = 0;
+        for (let c = 0; c < sheet.frozenCols; c++) frozenW += sheet.colWidths[c] || DEFAULT_COL_WIDTH;
+        const avail = (el?.clientWidth ?? 800) - (HEADER_COL_WIDTH + frozenW) * zoom;
+        let c = from.c;
+        let used = 0;
+        let moved = 0;
+        while (c + step >= 0 && c + step < colCount) {
+          const w = (sheet.colWidths[c + step] || DEFAULT_COL_WIDTH) * zoom;
+          if (moved > 0 && used + w > avail) break;
+          used += w;
+          c += step;
+          moved++;
+        }
+        return { r: from.r, c, scrollBy: { top: 0, left: step * used } };
+      }
+      // PageDown / PageUp: เลื่อนทีละจำนวนแถวที่เห็นบนจอ (ไม่นับแถวตรึง) และเลื่อนหน้าจอเท่ากัน
+      let frozenH = 0;
+      for (let r = 0; r < sheet.frozenRows; r++) {
+        if (!hiddenSet.has(r)) frozenH += sheet.rowHeights[r] || DEFAULT_ROW_HEIGHT;
+      }
+      const avail = (el?.clientHeight ?? 600) - (HEADER_ROW_HEIGHT + frozenH) * zoom;
+      let count = 0;
+      let used = 0;
+      let r = from.r;
+      for (;;) {
+        const n = moveVisibleRows(nav, r, 1, step);
+        if (n === r) break;
+        const h = (sheet.rowHeights[n] || DEFAULT_ROW_HEIGHT) * zoom;
+        if (count > 0 && used + h > avail) break;
+        used += h;
+        r = n;
+        count++;
+      }
+      return { r, c: from.c, scrollBy: { top: step * used, left: 0 } };
+    }
+    return null;
+  };
 
   // Global keyboard shortcuts in grid
   useEffect(() => {
@@ -413,19 +499,23 @@ export const Grid: React.FC = () => {
         return;
       }
 
-      if (e.key === 'ArrowUp') {
+      // ปุ่มเลื่อน (SPEC 5.1): ลูกศร, Ctrl+ลูกศร, Home/End, Ctrl+Home/End, PageUp/PageDown, Alt+PageUp/PageDown
+      // Shift ร่วม = ขยายการเลือกจากขอบที่กำลังขยาย (focus) โดยเซลที่ใช้งานอยู่ไม่ย้าย
+      const navTarget = navigationTarget(e, isCtrl);
+      if (navTarget) {
         e.preventDefault();
-        setActiveCell(stepRow(activeCell.r, -1), activeCell.c, e.shiftKey);
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveCell(stepRow(activeCell.r, 1), activeCell.c, e.shiftKey);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        setActiveCell(activeCell.r, activeCell.c - 1, e.shiftKey);
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        setActiveCell(activeCell.r, activeCell.c + 1, e.shiftKey);
-      } else if (e.key === 'Tab') {
+        if (e.shiftKey) extendSelectionTo(navTarget.r, navTarget.c);
+        else setActiveCell(navTarget.r, navTarget.c, false);
+        const el = containerRef.current;
+        if (navTarget.scrollBy && el) {
+          el.scrollTop = Math.max(0, el.scrollTop + navTarget.scrollBy.top);
+          el.scrollLeft = Math.max(0, el.scrollLeft + navTarget.scrollBy.left);
+        }
+        scrollToCell(navTarget.r, navTarget.c);
+        return;
+      }
+
+      if (e.key === 'Tab') {
         e.preventDefault();
         setActiveCell(activeCell.r, activeCell.c + (e.shiftKey ? -1 : 1), false);
       } else if (e.key === 'Enter') {
@@ -471,6 +561,9 @@ export const Grid: React.FC = () => {
     searchPrev,
     prevSheet,
     stepRow,
+    navigationTarget,
+    extendSelectionTo,
+    scrollToCell,
     toggleFilter,
     zoomIn,
     zoomOut,

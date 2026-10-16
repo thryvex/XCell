@@ -40,6 +40,7 @@ import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/addres
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../core/xlsx';
 import { resolveTheme, ThemePref, ResolvedTheme } from '../core/theme';
 import { formatDisplayValue, convertTypedDate, editTextForCell, todaySerial, formatDate, setDisplayYearMode, YearMode } from '../core/numfmt';
+import { oppositeCorner } from '../core/navigation';
 import { CutMove, moveRefsInFormula, shiftFormula } from '../core/refshift';
 import {
   insertRow as opInsertRow,
@@ -152,6 +153,18 @@ export interface SheetState {
   // Actions
   setActiveCell: (r: number, c: number, extendSelection?: boolean) => void;
   setSelection: (r1: number, c1: number, r2: number, c2: number) => void;
+  /**
+   * ขอบที่กำลังขยายด้วย Shift+ปุ่มเลื่อน (focus) แยกจากเซลที่ใช้งานอยู่ (anchor = activeCell)
+   * null = ไม่ได้เก็บไว้ (ใช้มุมตรงข้ามของช่วงที่เลือก)
+   */
+  selectionFocus: { r: number; c: number } | null;
+  /** ขยายการเลือกจากเซลที่ใช้งานอยู่ไปถึง (r, c) โดยเซลที่ใช้งานอยู่ไม่ย้าย */
+  extendSelectionTo: (r: number, c: number) => void;
+  /** ขอบที่กำลังขยายของช่วงที่เลือกตอนนี้ */
+  getSelectionFocus: () => { r: number; c: number };
+  /** เซลที่ต้องเลื่อนตารางให้เห็น (ใช้กับ scrollToActiveToken; null = เซลที่ใช้งานอยู่) */
+  scrollTarget: { r: number; c: number } | null;
+  scrollToCell: (r: number, c: number) => void;
   startEditing: (initialValue?: string) => void;
   setEditingValue: (val: string) => void;
   commitEditing: (dr?: number, dc?: number) => void;
@@ -645,6 +658,7 @@ function runSearch(get: StoreGet, set: StoreSet, direction: 1 | -1, inclusive: b
   get().setActiveCell(m.r, m.c);
   set({
     search: { ...get().search, matches, current: idx },
+    scrollTarget: null,
     scrollToActiveToken: get().scrollToActiveToken + 1,
   });
 }
@@ -860,6 +874,8 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   pendingDeleteSheet: null,
   search: closedSearch,
   scrollToActiveToken: 0,
+  selectionFocus: null,
+  scrollTarget: null,
   pendingSort: null,
   notice: null,
   filteredRowsNotice: false,
@@ -894,17 +910,56 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       set({
         activeCell: { r: clampedR, c: clampedC },
         selection: { r1, c1, r2, c2 },
+        selectionFocus: null,
       });
     } else {
       set({
         activeCell: { r: clampedR, c: clampedC },
         selection: { r1: clampedR, c1: clampedC, r2: clampedR, c2: clampedC },
+        selectionFocus: null,
       });
     }
   },
 
+  extendSelectionTo: (r, c) => {
+    const { rowCount, colCount, activeCell, isEditing, commitEditing } = get();
+    if (isEditing) commitEditing(0, 0);
+    const fr = Math.max(0, Math.min(rowCount - 1, r));
+    const fc = Math.max(0, Math.min(colCount - 1, c));
+    set({
+      selection: {
+        r1: Math.min(activeCell.r, fr),
+        c1: Math.min(activeCell.c, fc),
+        r2: Math.max(activeCell.r, fr),
+        c2: Math.max(activeCell.c, fc),
+      },
+      selectionFocus: { r: fr, c: fc },
+    });
+  },
+
+  getSelectionFocus: () => {
+    const { selectionFocus: f, activeCell: a, selection: sel } = get();
+    // ใช้ focus ที่เก็บไว้เฉพาะเมื่อยังตรงกับช่วงที่เลือกอยู่ (ช่วงอาจถูกเปลี่ยนด้วยเมาส์/คำสั่งอื่น)
+    if (
+      f &&
+      sel.r1 === Math.min(a.r, f.r) &&
+      sel.r2 === Math.max(a.r, f.r) &&
+      sel.c1 === Math.min(a.c, f.c) &&
+      sel.c2 === Math.max(a.c, f.c)
+    ) {
+      return f;
+    }
+    const inside = a.r >= sel.r1 && a.r <= sel.r2 && a.c >= sel.c1 && a.c <= sel.c2;
+    return inside ? oppositeCorner(a, sel) : { ...a };
+  },
+
+  scrollToCell: (r, c) => {
+    set({ scrollTarget: { r, c }, scrollToActiveToken: get().scrollToActiveToken + 1 });
+  },
+
   setSelection: (r1, c1, r2, c2) => {
     set({
+      selectionFocus: null,
       selection: {
         r1: Math.min(r1, r2),
         c1: Math.min(c1, c2),
