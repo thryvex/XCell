@@ -112,7 +112,7 @@ export const WINDOW_BACKGROUND: Record<ResolvedTheme, string> = {
 };
 
 /** อาร์กิวเมนต์ที่ main ส่งธีมเริ่มต้นให้หน้าเว็บ (อ่านใน preload ก่อน React เริ่ม) */
-export const INITIAL_THEME_ARG = '--sheeteasy-theme=';
+export const INITIAL_THEME_ARG = '--xcell-theme=';
 
 /** ต้องเตือน "สีตัวอักษรอาจมองยากในโหมดมืด" หรือไม่ (เฉพาะโหมดมืดที่พื้นตารางไม่ได้ตั้งเป็นขาว) */
 export function needsLowContrastWarning(

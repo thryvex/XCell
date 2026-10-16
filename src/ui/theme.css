@@ -1,5 +1,5 @@
 /*
- * Design tokens ของ SheetEasy (Phase 5C)
+ * Design tokens ของ XCell (Phase 5C)
  * สีทั้งหมดของ UI อยู่ที่ไฟล์นี้ที่เดียว คอมโพเนนต์ใช้ผ่าน var(--...) เท่านั้น
  * ชุดสว่างเป็นค่าเริ่มต้นของ :root, ชุดมืดใช้เมื่อ <html data-theme="dark">
  * พื้นตาราง "ขาวเสมอ" เปลี่ยนเฉพาะ token ของพื้นที่ตาราง (--grid-*, --ref-*, --search-*)

@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 
 describe('Atomic File Write Logic (SPEC 6.2)', () => {
-  const tempDir = path.join(os.tmpdir(), `sheeteasy-atomic-test-${Date.now()}`);
+  const tempDir = path.join(os.tmpdir(), `xcell-atomic-test-${Date.now()}`);
 
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });

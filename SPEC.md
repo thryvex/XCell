@@ -24,7 +24,7 @@
 | เทคโนโลยี | Electron + Vite + React + TypeScript |
 | ระบบปฏิบัติการ | Windows 10/11 (หลัก), macOS (รอง) |
 | ภาษา UI | ไทยอย่างเดียว (โครงสร้างต้องเตรียมไว้ให้เพิ่มภาษาอื่นได้ โดยแยกข้อความไว้ที่ `src/i18n/th.ts`) |
-| ชื่อแอป (ชั่วคราว) | `SheetEasy` (เปลี่ยนได้ที่เดียวใน `package.json` และ `src/appInfo.ts`) |
+| ชื่อแอป (ชั่วคราว) | `XCell` (เปลี่ยนได้ที่เดียวใน `package.json` และ `src/appInfo.ts`) |
 | รูปแบบไฟล์หลัก | `.xlsx` |
 | ขนาดตารางเริ่มต้น | 26 คอลัมน์ (A–Z) × 100 แถว ขยายได้ถึง A–ZZ และ 10,000 แถว |
 | บันทึกอัตโนมัติ | เขียนไฟล์กู้คืนทุก 30 วินาที **ไม่เขียนทับไฟล์จริง** ผู้ใช้ต้องกดบันทึกเอง (เริ่มใน Phase 3) |
@@ -473,7 +473,7 @@ type Workbook = { sheets: Sheet[]; activeSheet: number };
 
 ### 13.1 ตัวติดตั้ง (`electron-builder.yml`)
 - Windows: NSIS installer (`.exe`) + portable; macOS: `.dmg`; (Linux AppImage ไม่บังคับ)
-- `appId: com.example.sheeteasy` (ให้เจ้าของโปรเจกต์เปลี่ยนก่อนปล่อยจริง)
+- `appId: io.github.bosschaisit.xcell`, `productName: XCell` (ไฟล์ติดตั้ง `XCell Setup {version}.exe`)
 - `fileAssociations` สำหรับ `.xlsx`/`.csv` แบบ "Open with" ไม่ใช่ default handler
 - หมายเหตุ: ยังไม่เซ็นชื่อ (code signing) ผู้ใช้จะเห็นคำเตือน SmartScreen/Gatekeeper ใส่วิธีผ่านคำเตือนไว้ใน README (ภาษาไทย พร้อมภาพประกอบเป็นข้อความ)
 

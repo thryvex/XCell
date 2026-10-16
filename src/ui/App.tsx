@@ -104,8 +104,8 @@ export const App: React.FC = () => {
           mode = prefs?.yearMode;
           hideBeNoticeRef.current = prefs?.hideBuddhistSaveNotice === true;
         } else {
-          mode = localStorage.getItem('sheeteasy_year_mode') ?? undefined;
-          hideBeNoticeRef.current = localStorage.getItem('sheeteasy_hide_be_notice') === 'true';
+          mode = localStorage.getItem('xcell_year_mode') ?? undefined;
+          hideBeNoticeRef.current = localStorage.getItem('xcell_hide_be_notice') === 'true';
         }
       } catch {}
       if (mode === 'be') useSheetStore.getState().setYearMode('be', false);
@@ -127,8 +127,8 @@ export const App: React.FC = () => {
           theme = prefs?.theme;
           white = prefs?.gridWhite === true;
         } else {
-          theme = localStorage.getItem('sheeteasy_theme');
-          white = localStorage.getItem('sheeteasy_grid_white') === '1';
+          theme = localStorage.getItem('xcell_theme');
+          white = localStorage.getItem('xcell_grid_white') === '1';
         }
       } catch {}
       const store = useSheetStore.getState();
@@ -191,7 +191,7 @@ export const App: React.FC = () => {
       electronAPI.setPreferences({ hideBuddhistSaveNotice: true }).catch(() => {});
     } else {
       try {
-        localStorage.setItem('sheeteasy_hide_be_notice', 'true');
+        localStorage.setItem('xcell_hide_be_notice', 'true');
       } catch {}
     }
   };
@@ -296,7 +296,7 @@ export const App: React.FC = () => {
       } catch {}
     } else {
       try {
-        const stored = localStorage.getItem('sheeteasy_show_welcome');
+        const stored = localStorage.getItem('xcell_show_welcome');
         if (stored !== null) {
           showWelcome = stored === 'true';
         }
@@ -319,7 +319,7 @@ export const App: React.FC = () => {
       } catch {}
     } else {
       try {
-        localStorage.setItem('sheeteasy_show_welcome', String(newPrefs.showWelcomeGuide));
+        localStorage.setItem('xcell_show_welcome', String(newPrefs.showWelcomeGuide));
       } catch {}
     }
   };

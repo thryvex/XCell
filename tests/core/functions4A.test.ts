@@ -310,7 +310,7 @@ describe('Phase 4A: Conditional, Date, and Text Functions', () => {
         A2: ' ',
         A3: 'World',
       });
-      expect(evalAt(sheet, '=CONCAT("Sheet", "Easy")')).toBe('SheetEasy');
+      expect(evalAt(sheet, '=CONCAT("X", "Cell")')).toBe('XCell');
       expect(evalAt(sheet, '=CONCAT(A1, A2, A3)')).toBe('Hello World');
       expect(evalAt(sheet, '=CONCAT(A1:A3)')).toBe('Hello World');
     });
@@ -325,11 +325,11 @@ describe('Phase 4A: Conditional, Date, and Text Functions', () => {
 
     it('LEN correctly counts characters including Thai Unicode code units matching Google Sheets', () => {
       const sheet = createSheetWithGrid({
-        A1: 'SheetEasy',
+        A1: 'XCell',
         A2: 'สวัสดี', // ส (1) + ว (1) + ั (1) + ส (1) + ด (1) + ี (1) = 6 code units
         A3: '',
       });
-      expect(evalAt(sheet, '=LEN(A1)')).toBe(9);
+      expect(evalAt(sheet, '=LEN(A1)')).toBe(5);
       expect(evalAt(sheet, '=LEN(A2)')).toBe(6);
       expect(evalAt(sheet, '=LEN(A3)')).toBe(0);
     });

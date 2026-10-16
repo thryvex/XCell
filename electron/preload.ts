@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // ธีมที่ใช้จริงตอนเปิดหน้าต่าง (main ส่งมาเป็นอาร์กิวเมนต์ ต้องตรงกับ INITIAL_THEME_ARG ใน src/core/theme.ts)
 // ประกาศเองที่นี่เพราะ preload แบบ sandbox โหลดไฟล์อื่นไม่ได้
-const INITIAL_THEME_ARG = '--sheeteasy-theme=';
+const INITIAL_THEME_ARG = '--xcell-theme=';
 const initialTheme: 'light' | 'dark' =
   process.argv.find((a) => a.startsWith(INITIAL_THEME_ARG))?.slice(INITIAL_THEME_ARG.length) === 'dark' ? 'dark' : 'light';
 

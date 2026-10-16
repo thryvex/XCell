@@ -1,4 +1,4 @@
-# PROGRESS: บันทึกความคืบหน้าและการตัดสินใจของโปรเจกต์ SheetEasy
+# PROGRESS: บันทึกความคืบหน้าและการตัดสินใจของโปรเจกต์ XCell
 
 > เอกสารนี้ใช้บันทึกสถานะจริงของโปรเจกต์ ข้อตกลงพิเศษ บั๊กที่ยังค้างอยู่ และงานถัดไป  
 > **กติกา:** เริ่มงานทุกครั้งให้อ่านไฟล์นี้ก่อน และอัปเดตไฟล์นี้ทุกครั้งที่จบงานย่อยหรือก่อน commit
@@ -322,6 +322,15 @@
   * ภาพก่อน/หลัง (AI ถ่ายผ่าน Chrome DevTools Protocol จากแอปที่ build แล้ว 24 หน้าจอ × ธีมสว่าง/มืด รวมหน้าต่างกู้คืน ตัวช่วยสูตร นำเข้า CSV เรียงลำดับ ตัวกรอง แถบเตือน กล่องบันทึกทับ) อยู่ใน scratchpad ของ session ไม่ได้อยู่ใน repo
   * ผลข้างเคียงที่เห็นในภาพ: ปุ่มบน toolbar แคบลง แถวแรกจึงจุปุ่มได้มากขึ้น "แยกเซล" ไปขึ้นต้นแถวที่สอง (เดิมขึ้นต้นด้วย "เส้นขอบ")
   * **ยังไม่ได้ทดสอบ:** tooltip ของสามเหลี่ยมในเซลขึ้นเมื่อชี้ (ใช้ `title` ของเซลเดิม), หน้าต่างอื่นที่ไม่ได้ถ่าย (ยืนยันการลบแถวที่ถูกอ้างอิง, ส่งออก CSV, แจ้งปี พ.ศ. ตอนบันทึก, เปลี่ยนชื่อชีตผิดกฎ)
+
+* **เปลี่ยนชื่อแอป `feature/rebrand-xcell`:** เปลี่ยนชื่อจาก SheetEasy เป็น XCell
+  * `main` fast-forward ไปที่ `feature/ui-polish` (`ef175a9`) ในเครื่องแล้วแตก branch นี้ (ยังไม่ push)
+  * `package.json` name = `xcell`, productName = `XCell`; `electron-builder.yml` appId = `io.github.bosschaisit.xcell`, productName = `XCell` (ชื่อไฟล์ติดตั้งตามค่าเริ่มต้นของ electron-builder: `XCell Setup 0.1.0.exe`, portable `XCell 0.1.0.exe`)
+  * ชื่อหน้าต่าง, `index.html`, `src/appInfo.ts`, ข้อความใน `th.ts` (หน้าเริ่มต้นใช้งาน, ช่วยเหลือ, เกี่ยวกับ), ผู้สร้างในไฟล์ .xlsx (`creator`/`lastModifiedBy` = XCell), อาร์กิวเมนต์ภายใน `--xcell-theme=`, คีย์ localStorage ของโหมดเบราว์เซอร์ `xcell_*`, LICENSE (XCell Contributors), README, SPEC, `docs/QA-google-sheets.md`
+  * ข้อมูลของแอป: เลือกเริ่มใหม่ (ไม่ย้ายข้อมูล) — Electron ใช้โฟลเดอร์ `%APPDATA%XCell` แทน `%APPDATA%sheeteasy` เดิม (การตั้งค่าธีม ไฟล์ล่าสุด ไฟล์กู้คืนเริ่มใหม่) โฟลเดอร์เดิมไม่ถูกลบ
+  * คงไว้: ชื่อ repo / โฟลเดอร์โปรเจกต์ / URL ที่มี `sheeteasy`, ประวัติรายการเก่าใน PROGRESS
+  * เทสต์ที่ผูกกับชื่อ: `tests/smoke.test.ts` (ชื่อแอป), `tests/core/functions4A.test.ts` (CONCAT/LEN ใช้ข้อความ "XCell" — LEN 9 → 5); รวม 512 ผ่าน, `tsc` ผ่าน
+  * **ไอคอน: ยังไม่ได้ทำ** — ไม่พบไฟล์ `build/icon-source.png` ในโปรเจกต์และในเครื่อง (รอเจ้าของโปรเจกต์วางไฟล์)
 
 * **สถานะ:** กำลังทำ — ก้อน 5A, 5B และ 5C เสร็จรอตรวจ, 5D เลื่อนไป v0.2, แก้ไข `fix/widths-chart-warning` และเทมเพลต `feature/product-template` รวมเข้า `main` ในเครื่องแล้ว, `feature/ui-polish` รอตรวจ
 

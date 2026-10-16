@@ -78,7 +78,7 @@ describe('src/core/xlsx Durability & Unsupported Features (SPEC 6.4)', () => {
       result: 4500,
     };
 
-    // 2. Import into SheetEasy
+    // 2. Import into XCell
     const sheetEasyWb = await excelJSToWorkbook(excelWb);
     const sheetModel = sheetEasyWb.sheets[0];
     const cellRecord = sheetModel.cells['B2'];

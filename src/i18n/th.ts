@@ -1,6 +1,6 @@
 export const th = {
   app: {
-    title: 'SheetEasy',
+    title: 'XCell',
     unsavedDot: '●',
   },
   toolbar: {
@@ -86,7 +86,7 @@ export const th = {
     closeTooltip: 'ปิด (เริ่มตารางว่าง)',
   },
   welcomeGuide: {
-    title: 'เริ่มต้นใช้งาน SheetEasy',
+    title: 'เริ่มต้นใช้งาน XCell',
     subtitle: 'คำแนะนำ 4 ข้อ',
     step1Title: '1. พิมพ์สูตร',
     step1Desc: 'พิมพ์สูตรขึ้นต้นด้วย = เช่น =SUM(D2:D10) หรือพิมพ์แบบย่อ เช่น รวม a1:a10 หรือ avg a1,b1,c1',
@@ -195,9 +195,9 @@ export const th = {
       { key: 'Ctrl+ล้อเมาส์', desc: 'ซูมเข้า/ออก' },
     ],
     gsTitle: 'วิธีนำไฟล์ .xlsx ไปเปิดใน Google Sheets',
-    gsStep1: '1. อัปโหลดไฟล์: เข้าเว็บ Google Drive แล้วลากไฟล์ .xlsx ที่บันทึกจาก SheetEasy ไปวางเพื่ออัปโหลด',
+    gsStep1: '1. อัปโหลดไฟล์: เข้าเว็บ Google Drive แล้วลากไฟล์ .xlsx ที่บันทึกจาก XCell ไปวางเพื่ออัปโหลด',
     gsStep2: '2. เปิดไฟล์: ดับเบิลคลิกไฟล์ใน Google Drive แล้วเลือก "เปิดด้วย Google Sheets" (หรือใน Google Sheets ไปที่เมนู ไฟล์ > นำเข้า)',
-    gsStep3: '3. นำกลับมาใช้: หากต้องการนำไฟล์กลับมาแก้ไขใน SheetEasy ให้ไปที่ ไฟล์ > ดาวน์โหลด > Microsoft Excel (.xlsx)',
+    gsStep3: '3. นำกลับมาใช้: หากต้องการนำไฟล์กลับมาแก้ไขใน XCell ให้ไปที่ ไฟล์ > ดาวน์โหลด > Microsoft Excel (.xlsx)',
     gsNote:
       'สูตร เซลที่ผสาน สี ฟอนต์ และรูปแบบ ฿ บาท ติดไปกับไฟล์ ข้อจำกัด: คอลัมน์ที่ปรับความกว้างแต่ไม่มีข้อมูลจะแสดงความกว้างเริ่มต้นใน Google Sheets',
     gsYearNote: 'ปี พ.ศ.: ไฟล์เก็บปีเป็น ค.ศ. เมื่อเปิดใน Google Sheets ปีจะแสดงเป็น ค.ศ. (ในแอปเลือกแสดงเป็น พ.ศ. ได้ที่ ตั้งค่า > รูปแบบปี)',
@@ -205,7 +205,7 @@ export const th = {
     shortcutKeyHeader: 'คีย์ลัด',
     shortcutActionHeader: 'การทำงาน',
     macNote: 'macOS: ใช้ปุ่ม Cmd แทน Ctrl',
-    aboutTitle: 'เกี่ยวกับ SheetEasy',
+    aboutTitle: 'เกี่ยวกับ XCell',
     aboutDesc: 'โปรแกรมตารางคำนวณสำหรับบันทึกรายรับรายจ่าย ใช้งานแบบออฟไลน์ บันทึกเป็นไฟล์ .xlsx ที่เปิดใน Google Sheets และ Excel ได้',
     aboutLicense: 'สัญญาอนุญาต: MIT License',
     aboutVersion: 'เวอร์ชัน {version}',

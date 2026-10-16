@@ -868,7 +868,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
 
   updateTitle: () => {
     const { fileName, isDirty } = get();
-    const title = `${fileName}${isDirty ? ' ●' : ''} - SheetEasy`;
+    const title = `${fileName}${isDirty ? ' ●' : ''} - XCell`;
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       (window as any).electronAPI.setTitle(title);
     }
@@ -1983,7 +1983,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       electronAPI.setPreferences({ yearMode: mode }).catch(() => {});
     } else {
       try {
-        localStorage.setItem('sheeteasy_year_mode', mode);
+        localStorage.setItem('xcell_year_mode', mode);
       } catch {}
     }
   },
@@ -1991,12 +1991,12 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   setThemePref: (pref: ThemePref, persist = true) => {
     set({ themePref: pref });
     // บันทึกผ่าน prefs:set — main ตั้ง nativeTheme (เมนูแอป/แถบหัวหน้าต่าง) และสีพื้นหน้าต่างตามค่านี้
-    if (persist) savePreference({ theme: pref }, 'sheeteasy_theme', pref);
+    if (persist) savePreference({ theme: pref }, 'xcell_theme', pref);
   },
 
   setGridWhite: (on: boolean, persist = true) => {
     set({ gridWhite: on });
-    if (persist) savePreference({ gridWhite: on }, 'sheeteasy_grid_white', on ? '1' : '0');
+    if (persist) savePreference({ gridWhite: on }, 'xcell_grid_white', on ? '1' : '0');
   },
 
   setSystemPrefersDark: (dark: boolean) => set({ systemPrefersDark: dark }),

@@ -1,5 +1,6 @@
 {
-  "name": "sheeteasy",
+  "name": "xcell",
+  "productName": "XCell",
   "version": "0.1.0",
   "description": "โปรแกรมตารางคำนวณสำหรับบันทึกรายรับรายจ่ายฉบับง่าย",
   "main": "dist-electron/main.js",
@@ -17,7 +18,7 @@
     "google-sheets",
     "electron"
   ],
-  "author": "SheetEasy Contributors",
+  "author": "XCell Contributors",
   "license": "MIT",
   "dependencies": {
     "@fontsource/sarabun": "^5.1.0",

@@ -91,12 +91,12 @@ function hexToArgb(hex?: string): string | undefined {
 }
 
 /**
- * Converts a SheetEasy Workbook to an ExcelJS Workbook
+ * Converts a XCell Workbook to an ExcelJS Workbook
  */
 export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Workbook> {
   const excelWorkbook = new ExcelJS.Workbook();
-  excelWorkbook.creator = 'SheetEasy';
-  excelWorkbook.lastModifiedBy = 'SheetEasy';
+  excelWorkbook.creator = 'XCell';
+  excelWorkbook.lastModifiedBy = 'XCell';
   excelWorkbook.created = new Date();
   excelWorkbook.modified = new Date();
 
@@ -258,7 +258,7 @@ export async function workbookToExcelJS(wbModel: Workbook): Promise<ExcelJS.Work
 }
 
 /**
- * Detects features in an ExcelJS Workbook that are unsupported by SheetEasy (SPEC 6.4)
+ * Detects features in an ExcelJS Workbook that are unsupported by XCell (SPEC 6.4)
  */
 export function detectUnsupportedFeatures(excelWorkbook: ExcelJS.Workbook): string[] {
   const features = new Set<string>();
@@ -314,7 +314,7 @@ export function detectUnsupportedFeatures(excelWorkbook: ExcelJS.Workbook): stri
 }
 
 /**
- * Checks if a formula string contains any functions not supported by SheetEasy
+ * Checks if a formula string contains any functions not supported by XCell
  */
 export function hasUnsupportedFunction(formulaStr: string): boolean {
   if (!formulaStr.startsWith('=')) return false;
@@ -335,7 +335,7 @@ export function hasUnsupportedFunction(formulaStr: string): boolean {
 }
 
 /**
- * Converts an ExcelJS Workbook to a SheetEasy Workbook model
+ * Converts an ExcelJS Workbook to a XCell Workbook model
  */
 export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promise<Workbook> {
   const sheets: Sheet[] = [];

@@ -1,5 +1,5 @@
-appId: com.example.sheeteasy
-productName: SheetEasy
+appId: io.github.bosschaisit.xcell
+productName: XCell
 directories:
   output: release
   buildResources: build
