@@ -261,3 +261,76 @@ export function normalizeSheetRefsInFormula(formula: string): string {
     return `${formatSheetReference(t.sheet)}!${rawAddress(t)}`;
   });
 }
+
+/**
+ * การย้ายเซลจากการตัด (Ctrl+X) แล้ววาง (SPEC 4.5 ข้อ 2)
+ * - sourceRows: แถวต้นทางที่ถูกตัดตามลำดับ (ไม่รวมแถวที่ตัวกรองซ่อน), คอลัมน์ c1..c2
+ * - destRows: แถวปลายทางของแต่ละแถวต้นทาง (ลำดับเดียวกัน), คอลัมน์เลื่อนไป dc
+ */
+export interface CutMove {
+  sourceSheet: string;
+  destSheet: string;
+  sourceRows: number[];
+  c1: number;
+  c2: number;
+  destRows: number[];
+  dc: number;
+}
+
+/** ตำแหน่งใหม่ของเซลต้นทาง (r, c) หรือ null ถ้าเซลนั้นไม่ได้ถูกย้าย */
+function movedCell(move: CutMove, rowIndex: Map<number, number>, r: number, c: number) {
+  if (c < move.c1 || c > move.c2) return null;
+  const i = rowIndex.get(r);
+  if (i === undefined) return null;
+  return { r: move.destRows[i], c: c + move.dc };
+}
+
+/**
+ * ปรับ reference หลังการตัด-วาง
+ * - reference (เซลหรือช่วงทั้งก้อน) ที่ชี้เซลที่ถูกย้าย ตามไปตำแหน่งใหม่ (รวม $ เหมือน Google Sheets)
+ *   ช่วงที่ถูกย้ายแค่บางส่วนคงเดิม
+ * - fromSheet: ชีตที่สูตรอยู่เดิม, toSheet: ชีตที่สูตรอยู่ตอนนี้ (ต่างกันเมื่อสูตรเองถูกย้ายข้ามชีต)
+ *   reference ที่ไม่มีชื่อชีตจะได้ชื่อชีตเมื่อจำเป็น เพื่อให้ยังชี้เซลเดิม
+ */
+export function moveRefsInFormula(formula: string, fromSheet: string, toSheet: string, move: CutMove): string {
+  const rowIndex = new Map(move.sourceRows.map((r, i) => [r, i] as [number, number]));
+  return rewriteRefs(formula, (t) => {
+    const refSheet = t.sheet ?? fromSheet;
+    const onSource = sameSheetName(refSheet, move.sourceSheet);
+    let target: string | null = null;
+
+    if (t.type === 'CELL_REF') {
+      const p = parseA1(t.value);
+      if (!p) return null;
+      const to = onSource ? movedCell(move, rowIndex, p.r, p.c) : null;
+      if (to) target = cellToA1(to.r, to.c, p.colAbs, p.rowAbs);
+    } else {
+      const rng = parseRange(t.value);
+      if (!rng) return null;
+      if (onSource) {
+        let all = true;
+        for (let r = rng.r1; r <= rng.r2 && all; r++) {
+          for (let c = rng.c1; c <= rng.c2 && all; c++) {
+            if (!movedCell(move, rowIndex, r, c)) all = false;
+          }
+        }
+        if (all) {
+          const a = movedCell(move, rowIndex, rng.r1, rng.c1)!;
+          const b = movedCell(move, rowIndex, rng.r2, rng.c2)!;
+          target = formatRange(rng, Math.min(a.r, b.r), a.c, Math.max(a.r, b.r), b.c);
+        }
+      }
+    }
+
+    const targetSheet = target !== null ? move.destSheet : refSheet;
+    const address = target ?? rawAddress(t);
+    // ชื่อชีต: ไม่มีชื่อเดิมและชี้ชีตที่สูตรอยู่ = ไม่ต้องใส่; ชื่อเดิมตรงกับชีตปลายทาง = คงรูปเดิม
+    let prefix: string;
+    if (t.sheet === undefined && sameSheetName(targetSheet, toSheet)) prefix = '';
+    else if (t.sheet !== undefined && sameSheetName(t.sheet, targetSheet)) prefix = sheetPrefix(t);
+    else prefix = `${formatSheetReference(targetSheet)}!`;
+
+    if (target === null && prefix === sheetPrefix(t)) return null;
+    return prefix + address;
+  });
+}

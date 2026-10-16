@@ -40,7 +40,7 @@ import { cellToA1, parseA1, isCellInRange, cycleReference } from '../core/addres
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../core/xlsx';
 import { resolveTheme, ThemePref, ResolvedTheme } from '../core/theme';
 import { formatDisplayValue, convertTypedDate, editTextForCell, todaySerial, formatDate, setDisplayYearMode, YearMode } from '../core/numfmt';
-import { shiftFormula } from '../core/refshift';
+import { CutMove, moveRefsInFormula, shiftFormula } from '../core/refshift';
 import {
   insertRow as opInsertRow,
   deleteRow as opDeleteRow,
@@ -106,6 +106,9 @@ export interface InternalClipboard {
   sourceSheetId?: string; // ชีตต้นทาง (สำหรับตัดข้ามชีต และวางเฉพาะค่า)
   // key ในคลิปบอร์ด → เซลต้นทางจริง (ต่างกันเมื่อข้ามแถวที่ตัวกรองซ่อน)
   sourceKeys?: Record<string, string>;
+  // แถวต้นทางที่ถูกคัดลอกตามลำดับ และสูตรเดิมก่อนเลื่อน (ใช้ตอนวางสิ่งที่ตัดมา SPEC 4.5 ข้อ 2)
+  sourceRows?: number[];
+  sourceRaw?: Record<string, string>;
 }
 
 /** สถานะการมองเห็นที่แยกอิสระต่อชีต (ความกว้าง/สูง/การตรึง เก็บอยู่ใน Sheet แล้ว) */
@@ -2044,6 +2047,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
     const sheet = workbook.sheets[activeSheetIndex];
     const copiedCells: Record<string, Cell> = {};
     const sourceKeys: Record<string, string> = {};
+    const sourceRaw: Record<string, string> = {};
 
     // คัดลอกเฉพาะแถวที่มองเห็น (แถวที่ตัวกรองซ่อนไม่ถูกคัดลอก) แล้วต่อแถวให้ชิดกัน
     const rows = visibleRowsInRange(sheet, selection.r1, selection.r2);
@@ -2060,6 +2064,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
         const compactKey = cellToA1(dstR, c);
         copiedCells[compactKey] = copy;
         sourceKeys[compactKey] = key;
+        sourceRaw[compactKey] = cell.raw;
       }
     });
 
@@ -2161,7 +2166,26 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       const isSingleCopied = clipboard.r1 === clipboard.r2 && clipboard.c1 === clipboard.c2;
       const isTargetMulti = selection.r1 !== selection.r2 || selection.c1 !== selection.c2;
 
-      if (isSingleCopied && isTargetMulti) {
+      const isCutMove = Boolean(clipboard.isCut) && !valuesOnly && srcIndex >= 0;
+      // ย้ายจากการตัด: สูตรของเซลที่ย้ายไม่เลื่อนแบบคัดลอก แต่ปรับเฉพาะ reference ที่ชี้เซลที่ย้าย (SPEC 4.5 ข้อ 2)
+      const cutMove: CutMove | null = isCutMove
+        ? (() => {
+            const sourceRows =
+              clipboard.sourceRows ??
+              Array.from({ length: clipboard.r2 - clipboard.r1 + 1 }, (_, i) => clipboard.r1 + i);
+            return {
+              sourceSheet: workbook.sheets[srcIndex].name,
+              destSheet: sheet.name,
+              sourceRows,
+              c1: clipboard.c1,
+              c2: clipboard.c2,
+              destRows: sourceRows.map((_, i) => visibleRowFrom(activeCell.r, i)),
+              dc,
+            };
+          })()
+        : null;
+
+      if (isSingleCopied && isTargetMulti && !isCutMove) {
         const srcKey = cellToA1(clipboard.r1, clipboard.c1);
         const srcCell = clipboard.cells[srcKey];
         for (let r = selection.r1; r <= selection.r2; r++) {
@@ -2186,7 +2210,12 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           const destC = p.c + dc;
 
           let rawVal = cell.raw;
-          if (rawVal.startsWith('=')) {
+          if (cutMove) {
+            const before = clipboard.sourceRaw?.[srcKey] ?? cell.raw;
+            rawVal = before.startsWith('=')
+              ? moveRefsInFormula(before, cutMove.sourceSheet, cutMove.destSheet, cutMove)
+              : before;
+          } else if (rawVal.startsWith('=')) {
             rawVal = valuesOnly
               ? String(evaluator.getCellValue(originalKey(srcKey), valueSheetIndex))
               : shiftFormula(rawVal, destR - p.r, dc);
@@ -2213,6 +2242,24 @@ export const useSheetStore = create<SheetState>((set, get) => ({
           delete srcSheet.cells[srcKey];
           evaluator.invalidate(srcKey, srcIndex);
         }
+      }
+
+      // สูตรทุกชีตที่อ้างเซลที่ถูกย้าย ตามไปตำแหน่งใหม่ (ยกเว้นเซลที่เพิ่งวาง ซึ่งปรับไปแล้วข้างบน)
+      if (cutMove) {
+        const written = new Set(patches.map((p) => p.key));
+        workbook.sheets.forEach((s, si) => {
+          for (const [key, c] of Object.entries(s.cells)) {
+            if (!c.raw || !c.raw.startsWith('=')) continue;
+            if (si === activeSheetIndex && written.has(key)) continue;
+            const moved = moveRefsInFormula(c.raw, s.name, s.name, cutMove);
+            if (moved === c.raw) continue;
+            const patch = { key, before: { ...c }, after: { ...c, raw: moved } };
+            s.cells[key] = { ...c, raw: moved };
+            if (si === activeSheetIndex) patches.push(patch);
+            else sourcePatches.push({ ...patch, sheetIndex: si });
+            evaluator.invalidate(key, si);
+          }
+        });
       }
 
       history.push({
