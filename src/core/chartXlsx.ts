@@ -426,7 +426,10 @@ function showsValues(dLbls: XmlNode | undefined): boolean {
  * hostSheetName: ชีตที่กราฟอยู่ (ใช้กับ reference ที่ไม่มีชื่อชีต)
  */
 export function parseChartXml(xml: string, hostSheetName: string): ParsedChart | null {
-  const space = parseXml(xml);
+  return parseChartTree(parseXml(xml), hostSheetName);
+}
+
+function parseChartTree(space: XmlNode, hostSheetName: string): ParsedChart | null {
   const chartNode = child(space, XML_NS.c, 'chart');
   const plotArea = child(chartNode, XML_NS.c, 'plotArea');
   if (!plotArea) return null;
@@ -504,6 +507,72 @@ export function parseChartXml(xml: string, hostSheetName: string): ParsedChart |
   };
 }
 
+// ---------------------------------------------------------------------------
+// การจัดรูปแบบที่แอปไม่เก็บ (แจ้งในแถบข้อมูลแบบปิดได้) — กราฟที่แอปเขียนเองต้องไม่ถูกนับ
+// ---------------------------------------------------------------------------
+
+/** element ที่ถ้ามี = มีการจัดรูปแบบที่จะหายเมื่อบันทึก */
+const FORMATTING_ELEMENTS = new Set([
+  'txPr', 'dLbl', 'dLblPos', 'manualLayout', 'userShapes', 'pictureOptions', 'upDownBars', 'dropLines',
+  'hiLowLines', 'dTable', 'explosion', 'minorGridlines', 'legendEntry',
+]);
+const SHOW_FLAGS = new Set(['showLegendKey', 'showCatName', 'showSerName', 'showPercent', 'showBubbleSize']);
+
+function isPlainSolid(node: XmlNode | undefined): boolean {
+  if (!node || node.uri !== XML_NS.a || node.local !== 'solidFill') return false;
+  return node.children.length === 1 && node.children[0].local === 'srgbClr' && node.children[0].children.length === 0;
+}
+
+/** spPr ของชุดข้อมูลที่แอปเก็บได้ครบ: แท่ง/ชิ้น = สีพื้นอย่างเดียว, เส้น = เส้นสีเดียว */
+function isKeptSeriesSpPr(spPr: XmlNode, type: ChartType): boolean {
+  const kids = spPr.children;
+  if (type === 'line') {
+    if (kids.length !== 1 || kids[0].local !== 'ln') return false;
+    return kids[0].children.every((c) => c.local === 'round' || isPlainSolid(c)) && kids[0].children.some(isPlainSolid);
+  }
+  return kids.length === 1 && isPlainSolid(kids[0]);
+}
+
+/**
+ * กราฟที่นำเข้าได้มีการจัดรูปแบบที่แอปไม่เก็บหรือไม่ (ฟอนต์, สีจากธีม Office, ขอบ, ป้ายข้อมูลแบบอื่น,
+ * ตำแหน่งที่กำหนดเอง, สีรายจุด, เส้นกริดที่ตั้งสี, รูปแบบตัวเลขของแกน, ช่วงแกนที่กำหนดเอง ฯลฯ)
+ */
+export function hasUnkeptFormatting(space: XmlNode, type: ChartType): boolean {
+  const walk = (node: XmlNode, parent: XmlNode | null): boolean => {
+    if (node.uri === XML_NS.c) {
+      if (FORMATTING_ELEMENTS.has(node.local)) return true;
+      if (SHOW_FLAGS.has(node.local) && node.attrs.val === '1') return true;
+      if (node.local === 'roundedCorners' && node.attrs.val === '1') return true;
+      if (node.local === 'majorGridlines' && node.children.length > 0) return true;
+      if (node.local === 'numFmt' && parent?.local !== 'dLbls' && node.attrs.sourceLinked === '0') return true;
+      if (node.local === 'numFmt' && parent?.local === 'dLbls') return true;
+      if (node.local === 'scaling' && node.children.some((c) => c.local !== 'orientation' || c.attrs.val !== 'minMax')) return true;
+      if ((node.local === 'catAx' || node.local === 'valAx' || node.local === 'dateAx') && child(node, XML_NS.c, 'delete')?.attrs.val === '1') return true;
+      if (node.local === 'symbol' && parent?.local === 'marker' && node.attrs.val !== 'circle') return true;
+      if (node.local === 'dPt') {
+        if (type !== 'pie') return true;
+        const idx = Number(child(node, XML_NS.c, 'idx')?.attrs.val ?? -1);
+        const sp = child(node, XML_NS.c, 'spPr');
+        const fill = sp?.children.length === 1 ? sp.children[0] : undefined;
+        const rgb = isPlainSolid(fill) ? fill!.children[0].attrs.val?.toUpperCase() : undefined;
+        if (!rgb || `#${rgb}` !== paletteColor(idx)) return true;
+        return false; // ภายใน dPt ที่ตรวจแล้วไม่ต้องเดินต่อ
+      }
+      if (node.local === 'spPr') {
+        // spPr ที่เก็บได้: ของชุดข้อมูล (ตามชนิด) และของจุดบนเส้น (marker) เท่านั้น
+        if (parent?.local === 'marker') return false;
+        if (parent?.local !== 'ser' || !isKeptSeriesSpPr(node, type)) return true;
+        return false;
+      }
+    }
+    if (node.uri === XML_NS.a && (node.local === 'rPr' || node.local === 'defRPr' || node.local === 'pPr' || node.local === 'endParaRPr')) {
+      if (Object.keys(node.attrs).some((k) => k !== 'lang' && k !== 'lvl') || node.children.length > 0) return true;
+    }
+    return node.children.some((c) => walk(c, node));
+  };
+  return walk(space, null);
+}
+
 function cellAnchor(node: XmlNode | undefined): CellAnchorEmu | null {
   if (!node) return null;
   const n = (local: string) => Number(textOf(child(node, XML_NS.xdr, local)) || 0);
@@ -543,6 +612,8 @@ export interface ReadChartsResult {
   chartsBySheet: SheetChart[][];
   /** มีกราฟที่นำเข้าไม่ได้ (จะหายเมื่อบันทึก) */
   unsupported: boolean;
+  /** มีกราฟที่นำเข้าได้แต่มีการจัดรูปแบบที่แอปไม่เก็บ */
+  formatting: boolean;
 }
 
 /** ไฟล์ส่วนกราฟใหญ่เกินนี้ (ไบต์ หลังแตก zip) ไม่อ่าน */
@@ -559,7 +630,7 @@ async function readPart(zip: JSZip, path: string): Promise<string | undefined> {
 
 /** อ่านกราฟจากไฟล์ .xlsx (sheets: ชีตที่อ่านจากไฟล์เดียวกันแล้ว ใช้ชื่อและความกว้าง/สูง) */
 export async function readChartsFromXlsx(bytes: Uint8Array, sheets: Sheet[]): Promise<ReadChartsResult> {
-  const result: ReadChartsResult = { chartsBySheet: sheets.map(() => []), unsupported: false };
+  const result: ReadChartsResult = { chartsBySheet: sheets.map(() => []), unsupported: false, formatting: false };
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(bytes);
@@ -607,7 +678,9 @@ export async function readChartsFromXlsx(bytes: Uint8Array, sheets: Sheet[]): Pr
         let parsed: ParsedChart | null = null;
         try {
           const xml = await readPart(zip, rel.target);
-          parsed = xml ? parseChartXml(xml, sheet.name) : null;
+          const space = xml ? parseXml(xml) : null;
+          parsed = space ? parseChartTree(space, sheet.name) : null;
+          if (space && parsed && hasUnkeptFormatting(space, parsed.type)) result.formatting = true;
         } catch {
           parsed = null;
         }

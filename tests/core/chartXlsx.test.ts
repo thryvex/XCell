@@ -2,13 +2,14 @@ import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import { exportToXlsxBuffer, importFromXlsxBuffer } from '../../src/core/xlsx';
-import { buildChartXml, parseChartXml, readChartsFromXlsx, xlsxChartRef } from '../../src/core/chartXlsx';
+import { buildChartXml, parseChartXml, readChartsFromXlsx, xlsxChartRef, hasUnkeptFormatting } from '../../src/core/chartXlsx';
 import { newChart, workbookChartContext, EMU_PER_PX } from '../../src/core/chart';
 import { Evaluator } from '../../src/core/evaluator';
 import { parseXml, MAX_XML_LENGTH } from '../../src/core/xmlTree';
 import { Workbook, Sheet, SheetChart, createEmptySheet } from '../../src/core/model';
 import { dateToSerial } from '../../src/core/numfmt';
 import { th } from '../../src/i18n/th';
+import { useSheetStore } from '../../src/ui/store';
 
 const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -385,5 +386,55 @@ describe('เปิดไฟล์ที่มีกราฟจากภาย�
     const opened = await importFromXlsxBuffer(await withExternalCharts(base(), [{ xml: GOOGLE_BAR, anchor: ONE_CELL }]));
     const again = await importFromXlsxBuffer(await exportToXlsxBuffer(opened));
     expect(stripIds(again.sheets[0].charts)).toEqual(stripIds(opened.sheets[0].charts));
+  });
+});
+
+describe('แถบข้อมูล "การจัดรูปแบบกราฟ"', () => {
+  it('กราฟที่แอปเขียนเองทุกชนิดและทุกตัวเลือกไม่ถูกนับ', () => {
+    const s = dataSheet('D');
+    const wb: Workbook = { sheets: [s], activeSheet: 0 };
+    for (const type of ['bar', 'line', 'pie'] as const) {
+      for (const dataLabels of [true, false]) {
+        const xml = buildChartXml({ ...fullChart('D', type), dataLabels }, ctxOf(wb))!;
+        expect(hasUnkeptFormatting(parseXml(xml), type), `${type} ${dataLabels}`).toBe(false);
+      }
+    }
+  });
+
+  it('ฟอนต์/ขอบ (Google Sheets), สีจากธีม Office (Excel), ตัวเลขบนกราฟแบบเปอร์เซ็นต์ ถูกนับ', () => {
+    expect(hasUnkeptFormatting(parseXml(GOOGLE_BAR), 'bar')).toBe(true);
+    expect(hasUnkeptFormatting(parseXml(EXCEL_LINE), 'line')).toBe(true);
+    const plainPie = EXCEL_PIE.replace(/<c:dPt>.*?<\/c:dPt>/s, '');
+    expect(hasUnkeptFormatting(parseXml(plainPie), 'pie')).toBe(false);
+    expect(hasUnkeptFormatting(parseXml(plainPie.replace('<c:showPercent val="0"/>', '<c:showPercent val="1"/>')), 'pie')).toBe(true);
+    expect(hasUnkeptFormatting(parseXml(EXCEL_PIE), 'pie')).toBe(true); // สีชิ้นจากธีม Office
+  });
+
+  it('เปิดไฟล์: ตั้งธง chartFormatting เฉพาะเมื่อมีกราฟที่จัดรูปแบบ ไม่ใช่แถบเตือน 6.4', async () => {
+    const base: Workbook = { sheets: [dataSheet('Data')], activeSheet: 0 };
+    const ext = await importFromXlsxBuffer(await withExternalCharts(base, [{ xml: GOOGLE_BAR, anchor: ONE_CELL }]));
+    expect(ext.chartFormatting).toBe(true);
+    expect(ext.unsupportedFeatures).toBeUndefined();
+    const own = createEmptySheet('Data');
+    Object.assign(own.cells, dataSheet('Data').cells);
+    own.charts = [fullChart('Data')];
+    const back = await importFromXlsxBuffer(await exportToXlsxBuffer({ sheets: [own], activeSheet: 0 }));
+    expect(back.chartFormatting).toBeUndefined();
+  });
+});
+
+describe('store: แถบข้อมูลการจัดรูปแบบกราฟ', () => {
+  it('ขึ้นเมื่อเปิดไฟล์ที่มีกราฟจัดรูปแบบ ปิดได้ และงานใหม่ไม่มีแถบ', async () => {
+    const S = useSheetStore.getState;
+    const bytes = await withExternalCharts({ sheets: [dataSheet('Data')], activeSheet: 0 }, [{ xml: GOOGLE_BAR, anchor: ONE_CELL }]);
+    await S().loadWorkbook(bytes, 'C:\ไฟล์\กราฟ.xlsx');
+    expect(S().chartFormattingNotice).toBe(true);
+    expect(S().unsupportedFeatures).toEqual([]);
+    expect(S().workbook.sheets[0].charts).toHaveLength(1);
+    S().dismissChartFormattingNotice();
+    expect(S().chartFormattingNotice).toBe(false);
+    await S().loadWorkbook(bytes, 'x.xlsx');
+    S().newWorkbook();
+    expect(S().chartFormattingNotice).toBe(false);
   });
 });

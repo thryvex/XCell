@@ -608,3 +608,20 @@ export function restoreCharts(wb: Workbook, snap: ChartsSnapshot): void {
     else delete s.charts;
   }
 }
+
+// ---------------------------------------------------------------------------
+// กราฟที่ข้อมูลหายทุกชุด (ไม่ถูกเขียนลง .xlsx)
+// ---------------------------------------------------------------------------
+
+/** มีชุดข้อมูลอย่างน้อยหนึ่งชุดที่ช่วงค่ายังอยู่ในชีตที่มีอยู่จริง */
+export function chartHasLiveData(chart: SheetChart, wb: Workbook): boolean {
+  return chart.series.some((s) => {
+    const ref = parseChartRef(s.values);
+    return ref !== null && wb.sheets.some((sh) => sameSheetName(sh.name, ref.sheet));
+  });
+}
+
+/** จำนวนกราฟที่ข้อมูลหายทุกชุด — ใช้เตือนก่อนบันทึก (SPEC 5.18) */
+export function countChartsWithLostData(wb: Workbook): number {
+  return wb.sheets.reduce((n, s) => n + (s.charts ?? []).filter((c) => !chartHasLiveData(c, wb)).length, 0);
+}

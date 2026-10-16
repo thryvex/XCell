@@ -498,6 +498,7 @@ export async function importFromXlsxBuffer(data: Uint8Array): Promise<Workbook> 
   });
   const features = new Set(wb.unsupportedFeatures ?? []);
   if (charts.unsupported) features.add(th.chart.unsupportedInFile);
+  if (charts.formatting) wb.chartFormatting = true;
   wb.unsupportedFeatures = features.size > 0 ? Array.from(features) : undefined;
   return wb;
 }

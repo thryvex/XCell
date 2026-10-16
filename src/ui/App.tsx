@@ -21,6 +21,7 @@ import { needsLowContrastWarning, WINDOW_BACKGROUND, ThemePref } from '../core/t
 import { CsvImportDialog } from './CsvImportDialog';
 import { PrintDialog } from './PrintDialog';
 import { th } from '../i18n/th';
+import { countChartsWithLostData } from '../core/chart';
 import { createLedgerWorkbook, createInventoryWorkbook } from '../templates';
 
 export const App: React.FC = () => {
@@ -47,6 +48,8 @@ export const App: React.FC = () => {
     filteredRowsNotice,
     showAllFilteredRows,
     dismissFilteredRowsNotice,
+    chartFormattingNotice,
+    dismissChartFormattingNotice,
     hasWarnedUnsupportedOverwrite,
     setHasWarnedUnsupportedOverwrite,
     dismissUnsupportedBanner,
@@ -67,6 +70,17 @@ export const App: React.FC = () => {
   const [recoveryList, setRecoveryList] = useState<any[]>([]);
 
   const [unsupportedOverwriteOpen, setUnsupportedOverwriteOpen] = useState(false);
+  // กราฟที่ข้อมูลหายทุกชุดจะไม่ถูกเขียนลงไฟล์: ถามก่อนบันทึก (5D)
+  const [lostChartsPrompt, setLostChartsPrompt] = useState<{ count: number; resolve: (ok: boolean) => void } | null>(null);
+  const confirmLostCharts = (): Promise<boolean> => {
+    const count = countChartsWithLostData(useSheetStore.getState().workbook);
+    if (count === 0) return Promise.resolve(true);
+    return new Promise((resolve) => setLostChartsPrompt({ count, resolve }));
+  };
+  const answerLostCharts = (ok: boolean) => {
+    lostChartsPrompt?.resolve(ok);
+    setLostChartsPrompt(null);
+  };
 
   // Phase 3D Modal states
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
@@ -389,6 +403,7 @@ export const App: React.FC = () => {
 
   // Execute save to a given file path
   const executeSaveToPath = async (targetPath: string): Promise<boolean> => {
+    if (!(await confirmLostCharts())) return false;
     try {
       const electronAPI = (window as any).electronAPI;
       const buffer = await saveWorkbook();
@@ -416,6 +431,7 @@ export const App: React.FC = () => {
 
   // Save As
   const handleSaveAs = async (): Promise<boolean> => {
+    if (!(await confirmLostCharts())) return false;
     try {
       const electronAPI = (window as any).electronAPI;
       const buffer = await saveWorkbook();
@@ -875,6 +891,32 @@ export const App: React.FC = () => {
         </div>
       )}
 
+      {/* กราฟในไฟล์ที่เปิดมามีการจัดรูปแบบที่แอปไม่เก็บ (5D) */}
+      {chartFormattingNotice && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: 'var(--banner-info-bg)',
+            color: 'var(--banner-info-fg)',
+            borderBottom: '1px solid var(--banner-info-border)',
+            padding: '7px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+          }}
+        >
+          <span>ℹ️ {th.chart.formattingNotice}</span>
+          <button
+            onClick={dismissChartFormattingNotice}
+            title={th.banner.dismiss}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--banner-info-fg)' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* สีตัวอักษรในไฟล์อาจมองยากบนพื้นมืด (5C) */}
       {lowContrastNotice && resolvedTheme === 'dark' && !gridWhite && (
         <div
@@ -988,6 +1030,16 @@ export const App: React.FC = () => {
         onCancel={() => {
           setUnsupportedOverwriteOpen(false);
         }}
+      />
+
+      {/* กราฟที่ข้อมูลหายจะไม่ถูกบันทึก (5D) */}
+      <ConfirmDialog
+        isOpen={lostChartsPrompt !== null}
+        message={th.chart.lostDataOnSave.replace('{count}', String(lostChartsPrompt?.count ?? 0))}
+        confirmText={th.chart.saveAnyway}
+        cancelText={th.dialog.cancel}
+        onConfirm={() => answerLostCharts(true)}
+        onCancel={() => answerLostCharts(false)}
       />
 
       {/* Delete Row/Col Referenced Warning Modal */}

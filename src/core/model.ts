@@ -117,6 +117,8 @@ export type Workbook = {
   sheets: Sheet[];
   activeSheet: number;
   unsupportedFeatures?: string[];
+  /** ไฟล์ที่เปิดมามีกราฟที่มีการจัดรูปแบบที่แอปไม่เก็บ (แถบข้อมูลแบบปิดได้, 5D) — ไม่ถูกบันทึก */
+  chartFormatting?: boolean;
   printSettings?: PrintSettings; // ตัวเลือกพิมพ์ล่าสุดของไฟล์ (5B)
 };
 

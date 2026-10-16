@@ -21,6 +21,7 @@ import {
   MAX_CHART_SERIES,
   MAX_CHART_POINTS,
   EMU_PER_PX,
+  countChartsWithLostData,
 } from '../../src/core/chart';
 import { renameSheet, deleteSheet, duplicateSheet } from '../../src/core/workbookOps';
 import { Evaluator } from '../../src/core/evaluator';
@@ -485,5 +486,19 @@ describe('niceTicks', () => {
     }
     expect(niceTicks(0, 0).max).toBeGreaterThan(0);
     expect(niceTicks(0, 0.3).ticks).toEqual([0, 0.1, 0.2, 0.3]);
+  });
+});
+
+describe('กราฟที่ข้อมูลหาย (เตือนก่อนบันทึก)', () => {
+  it('นับเฉพาะกราฟที่ช่วงค่าหายทุกชุด หรือชีตที่อ้างถูกลบ', () => {
+    const wb = refWorkbook();
+    expect(countChartsWithLostData(wb)).toBe(0);
+    shiftChartsOnDelete(wb, 0, 'col', 0, 1); // ป้ายหาย แต่ค่ายังอยู่
+    expect(countChartsWithLostData(wb)).toBe(0);
+    shiftChartsOnDelete(wb, 0, 'col', 0, 1); // ค่าหาย
+    expect(countChartsWithLostData(wb)).toBe(2);
+    const wb2 = refWorkbook();
+    deleteSheet(wb2, 0);
+    expect(countChartsWithLostData(wb2)).toBe(1);
   });
 });

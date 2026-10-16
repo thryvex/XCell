@@ -264,12 +264,14 @@ export interface SheetState {
 
   // Phase 4C: ตัวกรอง (แถวที่ซ่อนเกิดจากตัวกรองเท่านั้น)
   filteredRowsNotice: boolean; // ไฟล์ที่เปิดมีแถวที่ถูกซ่อนด้วยตัวกรอง
+  chartFormattingNotice: boolean; // ไฟล์ที่เปิดมีกราฟที่มีการจัดรูปแบบที่แอปไม่เก็บ (5D)
   toggleFilter: () => void;
   setColumnFilter: (col: number, cf: ColumnFilter | null) => void;
   reapplyFilter: () => void;
   sortFilterColumn: (col: number, dir: SortDirection) => void;
   showAllFilteredRows: () => void;
   dismissFilteredRowsNotice: () => void;
+  dismissChartFormattingNotice: () => void;
 
   // Phase 4C: ซูม (ต่อชีต, เก็บใน Sheet.zoom; ไม่อยู่ใน Undo)
   setZoom: (percent: number) => void;
@@ -398,6 +400,7 @@ function freshWorkbookState(wb: Workbook, activeCell = { r: 0, c: 0 }) {
     pendingDeleteSheet: null,
     search: closedSearch,
     filteredRowsNotice: false,
+    chartFormattingNotice: false,
     pendingSort: null,
   };
 }
@@ -854,6 +857,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   pendingSort: null,
   notice: null,
   filteredRowsNotice: false,
+  chartFormattingNotice: false,
   pendingCsvImport: null,
   yearMode: 'ce',
   themePref: 'system',
@@ -1456,6 +1460,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
       recoverySessionId: `recovery-${Date.now()}`,
       unsupportedFeatures: wb.unsupportedFeatures || [],
       filteredRowsNotice: wb.sheets.some((s) => (s.hiddenRows?.length ?? 0) > 0),
+      chartFormattingNotice: wb.chartFormatting === true,
       hiddenSheetNotice: wb.sheets.filter((s) => s.hidden).length,
       hasWarnedUnsupportedOverwrite: false,
     });
@@ -1867,6 +1872,7 @@ export const useSheetStore = create<SheetState>((set, get) => ({
   },
 
   dismissFilteredRowsNotice: () => set({ filteredRowsNotice: false }),
+  dismissChartFormattingNotice: () => set({ chartFormattingNotice: false }),
 
   // --- Phase 4C: ซูม ---
 
