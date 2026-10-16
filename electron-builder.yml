@@ -24,21 +24,23 @@ win:
         - x64
 mac:
   icon: build/icon.png
+  # Windows ลงทะเบียน "เปิดด้วย" เองใน build/installer.nsh (ไม่ตั้งเป็นโปรแกรมเริ่มต้น)
+  fileAssociations:
+    - ext: xlsx
+      name: Excel Worksheet
+      description: Microsoft Excel Worksheet
+      role: Editor
+    - ext: csv
+      name: CSV Document
+      description: Comma Separated Values
+      role: Editor
   target:
     - target: dmg
       arch:
         - x64
         - arm64
-fileAssociations:
-  - ext: xlsx
-    name: Excel Worksheet
-    description: Microsoft Excel Worksheet
-    role: Editor
-  - ext: csv
-    name: CSV Document
-    description: Comma Separated Values
-    role: Editor
 nsis:
+  include: build/installer.nsh
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
