@@ -337,6 +337,13 @@
     * ตรวจในแอปจริง (แอปที่ build แล้วรันด้วย electron ตอนพัฒนา): แถบหัวหน้าต่างแสดงไอคอนและชื่อ "ตารางบันทึก - XCell", ไอคอนบนทาสก์บาร์เป็นไอคอนใหม่ (ภาพเฉพาะหน้าต่างและเฉพาะไอคอนบนทาสก์บาร์ ด้วย PrintWindow ไม่ได้ถ่ายหน้าจอ)
     * **ยังไม่ได้ทดสอบ:** แอปที่แพ็กแล้ว / ตัวติดตั้ง (ไอคอนไฟล์ .exe, ไอคอนตัวติดตั้งและตัวถอนการติดตั้ง, ทางลัดเมนู Start, `resources/icon.ico`) เพราะยังไม่ให้สร้างตัวติดตั้ง; macOS
 
+* **ตัวติดตั้ง Windows (สร้างในเครื่อง ยังไม่ติด tag ยังไม่ push):** `main` fast-forward รวม `feature/rebrand-xcell` และ `fix/installer-open-with`; build จาก `main` ที่ `118c6ee` (git status สะอาด) ด้วย `npx electron-builder --win`
+  * ผลลัพธ์ใน `release/` (อยู่ใน .gitignore): `XCell Setup 0.1.0.exe` (NSIS, 84.7 MB) และ `XCell 0.1.0.exe` (portable, 84.5 MB); appId `io.github.bosschaisit.xcell`, ชื่อ XCell, เวอร์ชัน 0.1.0; ยังไม่ได้เซ็นชื่อ (SmartScreen จะเตือน)
+  * **แก้ก่อน build:** `fileAssociations` ของ electron-builder บน NSIS เขียนค่าเริ่มต้นของ `SoftwareClasses.xlsx` (ทำให้แย่งเป็นโปรแกรมเริ่มต้น ขัด SPEC 6.2) จึงย้าย `fileAssociations` ไปไว้เฉพาะ `mac` และให้ `build/installer.nsh` ลงทะเบียนเฉพาะ "เปิดด้วย" (`OpenWithProgids` ของ .xlsx/.csv, `ApplicationsXCell.exeSupportedTypes`) และลบออกตอนถอนการติดตั้ง
+  * ตรวจ `app.asar`: มีเฉพาะ `dist/`, `dist-electron/`, `package.json` และ `node_modules` ของ dependency ใช้งานจริง; ไม่มี `scripts/`, `tests/`, `docs/`, `build/` (รวม "Neon Xcel Spreadsheet Logo.png"); ฟอนต์ Sarabun อยู่ใน `dist/assets` (woff) และฝังใน CSS (woff2); `resources/icon.ico`, `resources/icon.png` มีครบ; ไอคอนใน .exe ทั้ง 3 ไฟล์เป็นไอคอนใหม่
+  * หมายเหตุ build ในเครื่องนี้: แตก `winCodeSign` ไม่ได้เพราะสร้าง symlink ของไฟล์ macOS ไม่ได้ (ไม่มีสิทธิ์ symlink) จึงแตกเองลง `%LOCALAPPDATA%electron-builderCachewinCodeSignwinCodeSign-2.6.0` (ไม่ได้แก้การตั้งค่า Windows); electron-builder ใส่ `resources/app-update.yml` (GitHub) ให้เองแม้แอปไม่มีโค้ดอัปเดตอัตโนมัติ
+  * **ยังไม่ได้ทดสอบ:** ติดตั้ง/ถอนการติดตั้งจริง, "เปิดด้วย" ใน Explorer, ทางลัดเมนู Start และ desktop, การทำงานของแอปที่ติดตั้ง (รอเจ้าของโปรเจกต์ลอง)
+
 * **สถานะ:** กำลังทำ — ก้อน 5A, 5B และ 5C เสร็จรอตรวจ, 5D เลื่อนไป v0.2, แก้ไข `fix/widths-chart-warning` และเทมเพลต `feature/product-template` รวมเข้า `main` ในเครื่องแล้ว, `feature/ui-polish` รอตรวจ
 
 ---
