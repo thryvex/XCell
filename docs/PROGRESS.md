@@ -388,15 +388,20 @@
   * ชื่อ repo XCell: `package.json` เพิ่ม `repository`/`homepage`/`bugs` (เดิมไม่มี) ชี้ `github.com/bosschaisit/XCell`; `electron-builder.yml` เพิ่ม `publish` (github, bosschaisit/XCell) — เดิม electron-builder เดาจาก git remote ซึ่งยังเป็น `sheeteasy`; ไม่ได้แตะ git remote และชื่อโฟลเดอร์ (repo บน GitHub ยังชื่อ sheeteasy จนกว่าเจ้าของโปรเจกต์จะเปลี่ยน)
   * `.gitignore` มี `release/` และ `build/Neon Xcel Spreadsheet Logo.png` (ตรวจด้วย `git check-ignore`)
   * ตัวติดตั้งใหม่: `release/XCell Setup 0.1.0.exe` 88,834,172 ไบต์ (84.7 MB), `release/XCell 0.1.0.exe` (portable) 88,569,079 ไบต์ (84.5 MB); `resources/app-update.yml` ชี้ bosschaisit/XCell; 561 เทสต์ผ่าน, `tsc` ผ่าน
-  * "Open with": ตัวติดตั้งลงทะเบียนแบบ `OpenWithProgids` + `ApplicationsXCell.exeSupportedTypes` ไม่เขียนค่าเริ่มต้นของ `.xlsx`/`.csv` (`build/installer.nsh` ตั้งแต่ `fix/installer-open-with`) — **ยังไม่ได้ทดสอบจริง** เพราะยังไม่ได้ติดตั้งในเครื่อง (ตรวจ registry แล้วไม่มีรายการของ XCell)
-  * ยังไม่มี `CHANGELOG.md` ตาม SPEC 13.3 และ README ยังไม่มีภาพหน้าจอ (SPEC 13.3) — ไม่อยู่ในขอบเขตข้อความนี้
+  * "Open with": ตัวติดตั้งลงทะเบียนแบบ `OpenWithProgids` + `ApplicationsXCell.exeSupportedTypes` ไม่เขียนค่าเริ่มต้นของ `.xlsx`/`.csv` (`build/installer.nsh` ตั้งแต่ `fix/installer-open-with`) — เจ้าของโปรเจกต์แจ้งว่าทดสอบตัวติดตั้งแล้วผ่านทุกข้อ (2026-10-17)
+  * เพิ่ม `CHANGELOG.md` (0.1.0: ฟีเจอร์หลัก + ข้อจำกัดที่รู้); README ยังไม่มีภาพหน้าจอ (เจ้าของโปรเจกต์ให้ข้ามไปก่อน)
+  * `.github/workflows/release.yml` แก้รอบสอง: push tag `v*` เท่านั้น, `windows-latest`, `permissions: contents: write`, `npm ci` → `npm test` → `npm run build` → `npx electron-builder --win --publish never` → `softprops/action-gh-release@v3` (`draft: true`, อัปโหลดเฉพาะ `release/XCell Setup *.exe`, `fail_on_unmatched_files: true`, token เริ่มต้น `github.token`)
+    * เวอร์ชัน action ตรวจจาก tag จริงด้วย `git ls-remote` และอ่าน `action.yml` ของ tag นั้น (2026-10-17): `actions/checkout@v7`, `actions/setup-node@v7` (มี input `node-version`, `cache`), `softprops/action-gh-release@v3` (มี input `draft`, `files`, `fail_on_unmatched_files`)
+    * Node 22 ใน CI (Node 20 หมดระยะสนับสนุนแล้ว) — ตัดสินใจเอง
+    * **ยังไม่เคยรันจริงบน GitHub:** ทั้ง workflow (npm ci / npm test บน windows-latest, การ build, glob ชื่อไฟล์ที่มีเว้นวรรค, การสร้าง draft release) — รู้ผลได้เมื่อ push tag ครั้งแรก
+  * build ในเครื่อง: `npx electron-builder --win --publish never` ไม่ต้องใช้ GH_TOKEN (ทดสอบโดยไม่มี GH_TOKEN/GITHUB_TOKEN ใน environment) — README แก้คำสั่งตามนี้; `npm ci --dry-run` ผ่าน (lockfile ตรงกับ package.json); ตัวติดตั้ง 88,834,131 ไบต์ (84.7 MB)
 
 * **สถานะการยืนยัน (ณ release/v0.1.0):**
-  * **เจ้าของโปรเจกต์แจ้งว่าตรวจแล้วผ่าน:** Phase 0–5C (2026-10-16), เทมเพลตรายการสินค้าใหม่, ไอคอนและ UI (ui-polish + rebrand XCell), ตัด-วางแล้ว reference ตามไป (5a), ปุ่มเลื่อนในตาราง (5b), อ้างทั้งคอลัมน์ A:A (5c)
-  * **ยังเป็นการวัด/ทดสอบโดย AI เท่านั้น (เจ้าของโปรเจกต์ยังไม่ได้แจ้งผล):** ผลทดลองความกว้างคอลัมน์ใน Google Sheets (V1–V7) และการแปลง 7 px ต่อหน่วย, คำเตือนกราฟตอนเปิด/บันทึกทับ, ตัวติดตั้ง Windows (ติดตั้ง/ถอนการติดตั้ง/"Open with"/ทางลัดเมนู Start ยังไม่มีใครทดสอบ), การเปิดไฟล์ที่ XCell บันทึกใน Google Sheets หลังแก้ความกว้างและหลังเพิ่ม A:A
+  * **เจ้าของโปรเจกต์แจ้งว่าตรวจแล้วผ่าน:** Phase 0–5C (2026-10-16), เทมเพลตรายการสินค้าใหม่, ไอคอนและ UI (ui-polish + rebrand XCell), ตัด-วางแล้ว reference ตามไป (5a), ปุ่มเลื่อนในตาราง (5b), อ้างทั้งคอลัมน์ A:A (5c), ตัวติดตั้ง Windows ทุกข้อ (2026-10-17)
+  * **ยังเป็นการวัด/ทดสอบโดย AI เท่านั้น (เจ้าของโปรเจกต์ยังไม่ได้แจ้งผล):** ผลทดลองความกว้างคอลัมน์ใน Google Sheets (V1–V7) และการแปลง 7 px ต่อหน่วย, คำเตือนกราฟตอนเปิด/บันทึกทับ, การเปิดไฟล์ที่ XCell บันทึกใน Google Sheets หลังแก้ความกว้างและหลังเพิ่ม A:A
   * **ยังไม่มีใครทดสอบ:** เปิดไฟล์ใน Microsoft Excel, macOS, ไฟล์ต้นแบบจริงที่ใช้ `=sum(G:G)` ของเจ้าของโปรเจกต์
 
-* **สถานะ:** เตรียมปล่อย v0.1.0 บน `release/v0.1.0` (รอเจ้าของโปรเจกต์ทดสอบตัวติดตั้งและเปลี่ยนชื่อ repo ก่อนติด tag); 5D (กราฟ) เลื่อนไป v0.2
+* **สถานะ:** v0.1.0 พร้อมใน `main` ในเครื่อง (ยังไม่ push ยังไม่ติด tag; รอเจ้าของโปรเจกต์เปลี่ยนชื่อ repo บน GitHub); 5D (กราฟ) เลื่อนไป v0.2
 
 ---
 

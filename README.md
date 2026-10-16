@@ -38,11 +38,11 @@ XCell เป็นโปรแกรมตารางคำนวณ (สเป
 ต้องใช้ Node.js 20 ขึ้นไป
 
 ```bash
-npm install                  # ติดตั้ง dependency
-npm run dev                  # รันโหมดพัฒนา
-npm test                     # เทสต์ (Vitest)
-npm run build                # build โค้ด
-npx electron-builder --win   # สร้างตัวติดตั้ง Windows ในโฟลเดอร์ release/
+npm install                                  # ติดตั้ง dependency
+npm run dev                                  # รันโหมดพัฒนา
+npm test                                     # เทสต์ (Vitest)
+npm run build                                # build โค้ด
+npx electron-builder --win --publish never   # สร้างตัวติดตั้ง Windows ในโฟลเดอร์ release/ (ไม่อัปโหลด ไม่ต้องใช้ GH_TOKEN)
 ```
 
 ## ใบอนุญาต

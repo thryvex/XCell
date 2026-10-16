@@ -1,5 +1,7 @@
-# สร้างตัวติดตั้ง Windows และแนบไว้ที่ GitHub Releases เมื่อ push tag รูปแบบ v* (เช่น v0.1.0) — SPEC 13.2
-# v0.1.0 รองรับเฉพาะ Windows (ไม่ build macOS)
+# สร้างตัวติดตั้ง Windows เมื่อ push tag รูปแบบ v* (เช่น v0.1.0) แล้วสร้าง GitHub Release แบบ draft
+# ให้เจ้าของโปรเจกต์ตรวจก่อนกด Publish เอง — อัปโหลดเฉพาะ "XCell Setup *.exe" (SPEC 13.2, v0.1.0 รองรับเฉพาะ Windows)
+# เวอร์ชัน action ตรวจจาก tag จริงของแต่ละ repo (2026-10-17): actions/checkout v7, actions/setup-node v7,
+# softprops/action-gh-release v3
 name: Release
 on:
   push:
@@ -10,14 +12,18 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: npx electron-builder --win --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # electron-builder ไม่อัปโหลดเอง (ใน CI ค่าเริ่มต้นจะพยายาม publish เมื่อเจอ tag)
+      - run: npx electron-builder --win --publish never
+      - uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          files: 'release/XCell Setup *.exe'
+          fail_on_unmatched_files: true
