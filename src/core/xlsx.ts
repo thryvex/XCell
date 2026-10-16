@@ -16,10 +16,12 @@ import {
 import { MARGINS_MM } from './paginate';
 import { Evaluator } from './evaluator';
 import { cellToA1, parseA1 } from './address';
-import { dateToSerial, THAI_TO_ERROR_MAP } from './numfmt';
+import { dateToSerial, THAI_TO_ERROR_MAP, formatDisplayValue } from './numfmt';
 import { isCellError, FUNCTIONS } from './functions';
 import { tokenize } from './tokenizer';
 import { normalizeSheetRefsInFormula } from './refshift';
+import { getChartData } from './chart';
+import { injectChartsIntoXlsx, readChartsFromXlsx } from './chartXlsx';
 
 const NUM_FMT_EXCEL: Record<string, string> = {
   number2: '#,##0.00',
@@ -237,14 +239,7 @@ export function detectUnsupportedFeatures(excelWorkbook: ExcelJS.Workbook): stri
       features.add('รูปภาพ');
     }
 
-    // 3. Charts / Drawings
-    if (
-      ((ws as any).drawings && (ws as any).drawings.length > 0) ||
-      ((ws as any)._drawings && (ws as any)._drawings.length > 0) ||
-      Boolean((ws.model as any)?.drawing)
-    ) {
-      features.add('แผนภูมิ/กราฟ');
-    }
+    // 3. กราฟ: ExcelJS ทิ้งกราฟตั้งแต่ตอนอ่าน จึงตรวจจาก zip ใน importFromXlsxBuffer (chartXlsx.ts) แทน
 
     // 4. Pivot tables
     if (
@@ -479,7 +474,19 @@ export async function excelJSToWorkbook(excelWorkbook: ExcelJS.Workbook): Promis
 export async function exportToXlsxBuffer(wb: Workbook): Promise<Uint8Array> {
   const excelWb = await workbookToExcelJS(wb);
   const buffer = await excelWb.xlsx.writeBuffer();
-  return new Uint8Array(buffer);
+  const bytes = new Uint8Array(buffer);
+  if (!wb.sheets.some((s) => s.charts && s.charts.length > 0)) return bytes;
+  // กราฟ (5D): แทรกลง zip หลัง ExcelJS เขียนแล้ว พร้อมค่า cache จากค่าที่คำนวณได้
+  const evaluator = new Evaluator(wb);
+  return injectChartsIntoXlsx(bytes, wb.sheets, (sheetIndex, chart) => {
+    const sheet = wb.sheets[sheetIndex];
+    const value = (key: string) => evaluator.getCellValue(key, sheetIndex);
+    const label = (key: string) => {
+      const v = value(key);
+      return v === undefined || v === '' ? '' : formatDisplayValue(v, sheet.cells[key]?.fmt);
+    };
+    return getChartData(chart.range, value, label);
+  });
 }
 
 /**
@@ -489,7 +496,18 @@ export async function importFromXlsxBuffer(data: Uint8Array): Promise<Workbook> 
   const excelWb = new ExcelJS.Workbook();
   // ExcelJS รับ Uint8Array ได้จริง แต่ type ประกาศเป็น Buffer ของ Node
   await excelWb.xlsx.load(data as unknown as Parameters<typeof excelWb.xlsx.load>[0]);
-  return await excelJSToWorkbook(excelWb);
+  const wb = await excelJSToWorkbook(excelWb);
+
+  // กราฟ (5D): อ่านจาก zip เอง — แบบที่รองรับเข้ามาเป็นกราฟในแอป แบบอื่นแจ้งในแถบเตือน (SPEC 6.4)
+  const charts = await readChartsFromXlsx(data, wb.sheets);
+  charts.chartsBySheet.forEach((list, i) => {
+    if (list.length > 0) wb.sheets[i].charts = list;
+  });
+  const features = new Set(wb.unsupportedFeatures ?? []);
+  if (charts.unsupported) features.add('แผนภูมิ/กราฟ');
+  if (charts.formatting) features.add('การจัดรูปแบบกราฟ');
+  wb.unsupportedFeatures = features.size > 0 ? Array.from(features) : undefined;
+  return wb;
 }
 
 /** แปลงค่า autoFilter ของ ExcelJS ("A1:C10" หรือ {from, to}) เป็นช่วง 0-based */

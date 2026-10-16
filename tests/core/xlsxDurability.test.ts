@@ -27,8 +27,7 @@ describe('src/core/xlsx Durability & Unsupported Features (SPEC 6.4)', () => {
     // Mock pivot table
     (ws1 as any).pivotTables = [{ name: 'Pivot1' }];
 
-    // Mock drawings/charts
-    (ws1 as any).drawings = [{ name: 'Chart1' }];
+    // กราฟตรวจจาก zip ตอนเปิดไฟล์ (5D) — ดู tests/core/chartXlsx.test.ts
 
     // Mock media/images
     (ws1 as any).getImages = () => [{ imageId: 'img1', range: 'B2:D5' }];
@@ -40,7 +39,6 @@ describe('src/core/xlsx Durability & Unsupported Features (SPEC 6.4)', () => {
     expect(detected).toContain('การจัดรูปแบบตามเงื่อนไข (Conditional Formatting)');
     expect(detected).toContain('การตรวจสอบความถูกต้องของข้อมูล (Data Validation)');
     expect(detected).toContain('ตาราง Pivot');
-    expect(detected).toContain('แผนภูมิ/กราฟ');
     expect(detected).toContain('รูปภาพ');
   });
 

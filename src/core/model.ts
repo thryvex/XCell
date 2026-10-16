@@ -48,6 +48,21 @@ export type Sheet = {
   filter?: SheetFilter; // ตัวกรอง (4C)
   hiddenRows?: number[]; // แถวที่ซ่อนจากตัวกรอง (0-based, เรียงจากน้อยไปมาก)
   zoom?: number; // ระดับซูมเป็นเปอร์เซ็นต์ (ไม่มี = 100)
+  charts?: SheetChart[]; // กราฟบนชีตนี้ (5D) อ้างช่วงข้อมูลในชีตเดียวกัน
+};
+
+export type ChartType = 'bar' | 'line' | 'pie';
+
+/** กราฟลอยบนชีต (5D): ยึดมุมบนซ้ายกับเซล + ระยะเลื่อน, ขนาดเป็น px (ที่ซูม 100%) */
+export type SheetChart = {
+  id: string;
+  type: ChartType;
+  title: string;
+  /** ช่วงข้อมูล 0-based; null = ช่วงถูกลบหมดแล้ว (แสดง "ไม่มีข้อมูล") */
+  range: { r1: number; c1: number; r2: number; c2: number } | null;
+  anchor: { row: number; col: number; dx: number; dy: number };
+  width: number;
+  height: number;
 };
 
 /** เงื่อนไขกรองแบบ "กรองตามเงื่อนไข" */
